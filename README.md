@@ -9,8 +9,8 @@ just            # list commands
 just check      # format, Clippy, unit tests, fixtures, header tags
 ```
 
-No puzzle has been solved yet. The first `just new YEAR DAY` creates that year's
-crate.
+Solved: 2018 days 1 through 4, in crate `aoc18`. The first
+`just new YEAR DAY` for another year creates its crate.
 
 ## Start a day
 
@@ -90,7 +90,7 @@ pinned Rust 1.99.1 toolchain, Nextest, cargo-deny, cargo-machete, uv, zizmor,
 curl, just and GNU time, plus `perf` and `taskset` on Linux. On macOS,
 benchmarks report work as unavailable and run unpinned.
 
-CI is installed but has not run: no remote is configured.
+The `origin` remote is configured. Linux CI runs on publication; macOS remains unverified.
 
 ## Private files
 

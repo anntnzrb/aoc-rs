@@ -222,11 +222,11 @@ opportunities without expanding worker ownership.
 ## Status
 
 The workspace runs on x86_64 Linux; macOS is not yet verified. Solved: 2018
-day 1 (crate `aoc18`). Done: the Nix devshell, the Rust gate assets,
+days 1 through 4 (crate `aoc18`). Done: the Nix devshell, the Rust gate assets,
 `aoc-core` (calendar, answers, stdin runner) and `aoc-ops` with `fetch`,
 `puzzle`, `submit`, `new`, `run`, `test`, `bench`, `record` and `doc`, all
-exercised live, including real submissions. No publishing remote is
-configured, so CI and push are unrun.
+exercised live, including real submissions. The `origin` publishing remote
+is configured; main-branch publication and Linux CI have run successfully.
 Never read another language's AoC repository while solving: it contains
 solutions.
 
@@ -356,8 +356,8 @@ and get no agent scope.
 ## Workflow operations
 
 MAIN is the main checkout; WORK is the worker checkout. The main branch is
-`main`. No publishing remote is configured yet; the user adds `origin`. Generate
-BRANCH as `work/<8-lowercase-hex>`; choose WORK as a vacant sibling path
+`main`. The publishing remote is `origin`. Generate BRANCH as
+`work/<8-lowercase-hex>`; choose WORK as a vacant sibling path
 `MAIN-<hex>`, and include both in the brief.
 
 Worker references and answer records go in `WORK/.cache/scratch/<YEAR>/<DD>/`;
@@ -397,7 +397,7 @@ and refresh statements with `MAIN/target/release/aoc-ops` from MAIN, never with
 | Create isolated checkout | `git -C MAIN worktree add -b BRANCH WORK main` |
 | Integrate | `git -C MAIN switch main`, then `git -C MAIN merge BRANCH` |
 | Remove checkout / merged branch | `git -C MAIN worktree remove WORK`, then `git -C MAIN branch -d BRANCH`; preserve ignored caches and fixtures first; never force removal |
-| Push finished unit | `git -C MAIN push origin main` once the user configures `origin` |
+| Push finished unit | `git -C MAIN push origin main` |
 | Day solution ownership | `crates/aocYY/src/dayDD.rs`, `crates/aocYY/src/dayDD/`, `crates/aocYY/src/bin/dayDD*.rs` |
 | Day fixture ownership | `fixtures/<YEAR>/<DD>/` |
 | Cached input / statement | `inputs/<YEAR>/day<DD>.txt` / `puzzles/<YEAR>/<DD>.txt` |
