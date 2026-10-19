@@ -20,7 +20,7 @@ pub enum SolveError {
     CountOverflow,
 }
 
-/// Counts constellations; the unfinished second part renders as `0`.
+/// Counts constellations; this puzzle has no computational second part.
 ///
 /// # Errors
 /// Returns [`SolveError`] for invalid observations or an unrepresentable count.
@@ -35,12 +35,21 @@ pub fn solve(input: &str) -> Result<Answers, SolveError> {
             pending.extend(remaining.extract_if(.., |candidate| point.is_near(*candidate)));
         }
     }
-    Ok(Answers::new(count, 0))
+    Ok(Answers::part1_only(count))
 }
 
 #[cfg(test)]
 mod tests {
     use super::solve;
+
+    #[test]
+    fn no_computational_second_part_is_rendered() {
+        assert_eq!(
+            solve("1,2,3,4\n").unwrap().to_string(),
+            "1\n",
+            "only the constellation count is rendered"
+        );
+    }
 
     #[test]
     fn bridges_join_components_regardless_of_input_order() {
