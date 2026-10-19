@@ -1,6 +1,6 @@
-// approach: evaluate every three-by-three square using the stated cell-power formula
-// cost: O(N²) time for N=300, O(1) auxiliary memory, one input pass
-// trade: direct summation keeps the fixed-size search simple without storing the grid
+// approach: summed-area table gives constant-time square totals; enumerate every size and origin
+// cost: O(N³) time and O(N²) memory for N=300, one input pass
+// trade: storing prefix sums avoids repeatedly adding the same cells for overlapping squares
 
 //! Maximum-power fuel squares for Advent of Code 2018, day 11.
 
@@ -20,6 +20,12 @@ pub enum SolveError {
     /// An intermediate value exceeds its representation.
     #[error("grid power arithmetic overflow")]
     Overflow,
+    /// A table coordinate is not representable on this platform.
+    #[error("grid coordinate conversion failed")]
+    Coordinate(#[from] std::num::TryFromIntError),
+    /// A coordinate falls outside the summed-area table.
+    #[error("grid coordinate outside table")]
+    Bounds,
 }
 
 fn power(serial: u32, x: u32, y: u32) -> Result<i64, SolveError> {
@@ -36,43 +42,130 @@ fn power(serial: u32, x: u32, y: u32) -> Result<i64, SolveError> {
     digit.checked_sub(5).ok_or(SolveError::Overflow)
 }
 
-/// Finds the strongest three-by-three square; part two is not yet implemented.
+struct Grid {
+    stride: usize,
+    prefix: Vec<i64>,
+}
+
+impl Grid {
+    fn new(serial: u32, size: u32) -> Result<Self, SolveError> {
+        let stride = usize::try_from(size)?
+            .checked_add(1)
+            .ok_or(SolveError::Overflow)?;
+        let len = stride.checked_mul(stride).ok_or(SolveError::Overflow)?;
+        let mut grid = Self {
+            stride,
+            prefix: vec![0; len],
+        };
+        for y in 1..=size {
+            let mut row = 0_i64;
+            for x in 1..=size {
+                row = row
+                    .checked_add(power(serial, x, y)?)
+                    .ok_or(SolveError::Overflow)?;
+                let above = grid.at(x, y.checked_sub(1).ok_or(SolveError::Overflow)?)?;
+                let index = grid.index(x, y)?;
+                *grid.prefix.get_mut(index).ok_or(SolveError::Bounds)? =
+                    row.checked_add(above).ok_or(SolveError::Overflow)?;
+            }
+        }
+        Ok(grid)
+    }
+
+    fn index(&self, x: u32, y: u32) -> Result<usize, SolveError> {
+        let x = usize::try_from(x)?;
+        let y = usize::try_from(y)?;
+        if x >= self.stride || y >= self.stride {
+            return Err(SolveError::Bounds);
+        }
+        y.checked_mul(self.stride)
+            .and_then(|offset| offset.checked_add(x))
+            .ok_or(SolveError::Overflow)
+    }
+
+    fn at(&self, x: u32, y: u32) -> Result<i64, SolveError> {
+        self.prefix
+            .get(self.index(x, y)?)
+            .copied()
+            .ok_or(SolveError::Bounds)
+    }
+
+    fn square(&self, x: u32, y: u32, size: u32) -> Result<i64, SolveError> {
+        let right = x.checked_add(size).ok_or(SolveError::Overflow)?;
+        let bottom = y.checked_add(size).ok_or(SolveError::Overflow)?;
+        let bottom_right = self.at(right, bottom)?;
+        let bottom_left = self.at(x, bottom)?;
+        let top_right = self.at(right, y)?;
+        let top_left = self.at(x, y)?;
+        bottom_right
+            .checked_sub(bottom_left)
+            .and_then(|total| total.checked_sub(top_right))
+            .and_then(|total| total.checked_add(top_left))
+            .ok_or(SolveError::Overflow)
+    }
+}
+
+/// Finds the strongest three-by-three square and the strongest square of any size.
 ///
 /// # Errors
-/// Returns [`SolveError`] for invalid input or unrepresentable arithmetic.
+/// Returns [`SolveError`] for invalid input, arithmetic overflow or invalid table access.
 pub fn solve(input: &str) -> Result<Answers, SolveError> {
     let puzzle = parse(input)?;
-    let mut best = (i64::MIN, 1, 1);
-    let last = GRID_SIZE.checked_sub(2).ok_or(SolveError::Overflow)?;
-    for y in 1..=last {
-        for x in 1..=last {
-            let mut total = 0_i64;
-            for dy in 0..3 {
-                for dx in 0..3 {
-                    let cell = power(
-                        puzzle.serial,
-                        x.checked_add(dx).ok_or(SolveError::Overflow)?,
-                        y.checked_add(dy).ok_or(SolveError::Overflow)?,
-                    )?;
-                    total = total.checked_add(cell).ok_or(SolveError::Overflow)?;
+    let grid = Grid::new(puzzle.serial, GRID_SIZE)?;
+    let mut best = (i64::MIN, 1, 1, 1);
+    let mut best_three = (i64::MIN, 1, 1);
+    for size in 1..=GRID_SIZE {
+        let last = GRID_SIZE.checked_sub(size).ok_or(SolveError::Overflow)?;
+        for y in 0..=last {
+            for x in 0..=last {
+                let total = grid.square(x, y, size)?;
+                if total > best.0 {
+                    best = (total, x, y, size);
                 }
-            }
-            if total > best.0 {
-                best = (total, x, y);
+                if size == 3 && total > best_three.0 {
+                    best_three = (total, x, y);
+                }
             }
         }
     }
-    Ok(Answers::new(format!("{},{}", best.1, best.2), 0))
+    Ok(Answers::new(
+        format!(
+            "{},{}",
+            best_three.1.checked_add(1).ok_or(SolveError::Overflow)?,
+            best_three.2.checked_add(1).ok_or(SolveError::Overflow)?
+        ),
+        format!(
+            "{},{},{}",
+            best.1.checked_add(1).ok_or(SolveError::Overflow)?,
+            best.2.checked_add(1).ok_or(SolveError::Overflow)?,
+            best.3
+        ),
+    ))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::power;
+    use super::{Grid, SolveError, power};
 
     #[test]
     fn cell_power_handles_zero_hundreds_and_large_serials() {
         assert_eq!(power(0, 1, 1).unwrap(), -4, "121 has hundreds digit one");
         assert_eq!(power(0, 0, 0).unwrap(), -5, "no hundreds digit");
         assert_eq!(power(u32::MAX, 300, 300).unwrap(), -1, "wide intermediate");
+    }
+
+    #[test]
+    fn square_totals_include_boundaries_and_negative_cells() {
+        let grid = Grid::new(0, 2).unwrap();
+        assert_eq!(grid.square(0, 0, 2).unwrap(), -14, "whole grid");
+        assert_eq!(grid.square(1, 1, 1).unwrap(), -3, "bottom-right cell");
+        assert!(
+            matches!(grid.square(2, 2, 1), Err(SolveError::Bounds)),
+            "outside grid"
+        );
+        assert!(
+            matches!(grid.square(u32::MAX, 0, 1), Err(SolveError::Overflow)),
+            "coordinate overflow"
+        );
     }
 }
