@@ -1,6 +1,6 @@
-// approach: simulate reading-order turns; two breadth-first searches resolve destination and step ties
-// cost: O(R U V log V) time, O(V + U) memory, one input pass; R rounds, U units, V floor cells
-// trade: ordered sparse maps make tie-breaking explicit at the cost of tree lookups
+// approach: simulate reading-order turns with two BFS tie-breaks; try elf powers in ascending order
+// cost: O(A R U V log V) time, O(V + U) memory, one input pass; A powers, R rounds, U units, V cells
+// trade: ordered sparse maps clarify ties; linear power search avoids assuming victory is monotonic
 
 //! Exact round-by-round cavern combat.
 
@@ -98,7 +98,7 @@ fn outcome(rounds: u32, units: &BTreeMap<Position, Unit>) -> Result<u32, SolveEr
     rounds.checked_mul(hp).ok_or(SolveError::Overflow)
 }
 
-fn combat(puzzle: &Puzzle) -> Result<u32, SolveError> {
+fn combat(puzzle: &Puzzle, elf_power: u32) -> Result<(u32, usize), SolveError> {
     // Each run owns its evolving positions independently of the parsed map.
     let mut units = puzzle.units.clone();
     let mut rounds = 0_u32;
@@ -113,7 +113,11 @@ fn combat(puzzle: &Puzzle) -> Result<u32, SolveError> {
                 continue;
             };
             if !units.values().any(|enemy| enemy.faction != unit.faction) {
-                return outcome(rounds, &units);
+                let elves = units
+                    .values()
+                    .filter(|survivor| survivor.faction == Faction::Elf)
+                    .count();
+                return Ok((outcome(rounds, &units)?, elves));
             }
             let destination = if victim(position, unit.faction, &units).is_some() {
                 position
@@ -128,7 +132,12 @@ fn combat(puzzle: &Puzzle) -> Result<u32, SolveError> {
             if let Some(target) = victim(destination, unit.faction, &units) {
                 let enemy = units.get_mut(&target).ok_or(SolveError::Overflow)?;
                 // Damage bottoms out at death; negative hit points are irrelevant.
-                enemy.hp = enemy.hp.saturating_sub(3);
+                let power = if unit.faction == Faction::Elf {
+                    elf_power
+                } else {
+                    3
+                };
+                enemy.hp = enemy.hp.saturating_sub(power);
                 if enemy.hp == 0 {
                     units.remove(&target);
                 }
@@ -142,12 +151,28 @@ fn combat(puzzle: &Puzzle) -> Result<u32, SolveError> {
     }
 }
 
-/// Solves the combat outcome, with part two not yet implemented.
+/// Solves ordinary combat and the least-power casualty-free elf victory.
 ///
 /// # Errors
 /// Returns [`SolveError`] for invalid maps, stalemates, or numeric overflow.
 pub fn solve(input: &str) -> Result<Answers, SolveError> {
-    Ok(Answers::new(combat(&parse(input)?)?, 0))
+    let puzzle = parse(input)?;
+    let part1 = combat(&puzzle, 3)?.0;
+    let elves = puzzle
+        .units
+        .values()
+        .filter(|unit| unit.faction == Faction::Elf)
+        .count();
+    if elves != 0 {
+        // Above 200, every elf attack still kills exactly one goblin, so no new outcome is possible.
+        for power in 4..=200 {
+            let (score, survivors) = combat(&puzzle, power)?;
+            if survivors == elves {
+                return Ok(Answers::new(part1, score));
+            }
+        }
+    }
+    Ok(Answers::part1_only(part1))
 }
 
 #[cfg(test)]
@@ -157,12 +182,12 @@ mod tests {
     #[test]
     fn adjacent_duel_counts_only_complete_rounds() {
         assert_eq!(
-            combat(&parse("EG").unwrap()).unwrap(),
+            combat(&parse("EG").unwrap(), 3).unwrap().0,
             134,
             "elf wins after 67 rounds with two hp"
         );
         assert_eq!(
-            combat(&parse("EGE").unwrap()).unwrap(),
+            combat(&parse("EGE").unwrap(), 3).unwrap().0,
             9933,
             "dead turns do not finish combat prematurely"
         );
@@ -175,9 +200,23 @@ mod tests {
             "unreachable enemies"
         );
         assert_eq!(
-            combat(&parse("E").unwrap()).unwrap(),
+            combat(&parse("E").unwrap(), 3).unwrap().0,
             0,
             "no enemies ends before the first round"
+        );
+    }
+
+    #[test]
+    fn stronger_elves_win_without_casualties() {
+        assert_eq!(
+            combat(&parse("GE").unwrap(), 4).unwrap(),
+            (2500, 1),
+            "fifty completed rounds leave fifty hp"
+        );
+        assert_eq!(
+            combat(&parse("GE").unwrap(), 200).unwrap(),
+            (197, 1),
+            "one-hit kills still permit the first goblin attack"
         );
     }
 }
