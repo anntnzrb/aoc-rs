@@ -1,32 +1,48 @@
-//! Advent of Code 2018, day 9: the puzzle's domain model and parser.
+//! Validated marble game parameters.
+
+use std::num::NonZeroUsize;
 
 pub mod primary;
 
-/// The puzzle input, one entry per line in input order.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Puzzle<'a> {
-    lines: Vec<&'a str>,
+/// Number of players and final marble value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Puzzle {
+    players: NonZeroUsize,
+    last_marble: u64,
 }
 
-impl Puzzle<'_> {
-    /// Returns the input lines in their original order.
-    #[must_use]
-    pub fn lines(&self) -> &[&str] {
-        &self.lines
-    }
+/// Malformed marble game description.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum ParseError {
+    /// No game description.
+    #[error("empty game description")]
+    Empty,
+    /// Wrong description grammar or zero players.
+    #[error("expected positive players and a last marble value")]
+    Syntax,
+    /// Invalid unsigned integer.
+    #[error("invalid game parameter")]
+    Integer(#[from] std::num::ParseIntError),
 }
 
-/// Failure to parse a nonempty sequence of input lines.
-pub type ParseError = aoc_core::RecordsError<std::convert::Infallible>;
-
-/// Parses the puzzle input into its domain model.
+/// Parses one game using the statement's description grammar.
 ///
 /// # Errors
-///
-/// Returns [`ParseError::Empty`] when the input holds no lines.
-pub fn parse(input: &str) -> Result<Puzzle<'_>, ParseError> {
-    let lines = aoc_core::parse_records(input, Ok)?;
-    Ok(Puzzle { lines })
+/// Returns [`ParseError`] for malformed input or zero players.
+pub fn parse(input: &str) -> Result<Puzzle, ParseError> {
+    let text = input.trim_end();
+    if text.is_empty() {
+        return Err(ParseError::Empty);
+    }
+    let text = text.strip_suffix(" points").ok_or(ParseError::Syntax)?;
+    let (players, last) = text
+        .split_once(" players; last marble is worth ")
+        .ok_or(ParseError::Syntax)?;
+    Ok(Puzzle {
+        players: NonZeroUsize::new(players.parse()?).ok_or(ParseError::Syntax)?,
+        last_marble: last.parse()?,
+    })
 }
 
 #[cfg(test)]
@@ -35,28 +51,35 @@ mod tests {
 
     #[test]
     fn empty_input_is_rejected() {
-        assert_eq!(parse(""), Err(ParseError::Empty), "no lines");
+        assert!(matches!(parse(""), Err(ParseError::Empty)), "missing game");
     }
 
     #[test]
     fn lines_keep_their_order() {
-        let puzzle = parse("b\na\n").unwrap();
-        assert_eq!(puzzle.lines(), ["b", "a"], "input order");
+        let game = parse("2 players; last marble is worth 0 points").unwrap();
+        assert_eq!(
+            (game.players.get(), game.last_marble),
+            (2, 0),
+            "parameters retain their roles"
+        );
+        for invalid in [
+            "0 players; last marble is worth 1 points",
+            "2 players; last marble is worth -1 points",
+            "2 3",
+            "2 players; last marble is worth 1 points extra",
+        ] {
+            assert!(parse(invalid).is_err(), "invalid game {invalid}");
+        }
     }
 
     #[test]
     fn lines_borrow_the_input_and_strip_crlf() {
-        let input = String::from("b\r\n\r\na\r\n");
-        let puzzle = parse(&input).unwrap();
         assert_eq!(
-            puzzle.lines(),
-            ["b", "", "a"],
-            "line terminators and empty records"
-        );
-        assert_eq!(
-            puzzle.lines()[0].as_ptr(),
-            input.as_ptr(),
-            "borrowed storage"
+            parse("1 players; last marble is worth 4 points\r\n")
+                .unwrap()
+                .last_marble,
+            4,
+            "CRLF terminator"
         );
     }
 }
