@@ -22,9 +22,18 @@ struct Claim {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum ParseError {
-    /// The input holds no claims.
-    #[error("input is empty")]
-    Empty,
+    /// The input has no records or contains a malformed claim.
+    #[error(transparent)]
+    Records(#[from] aoc_core::RecordsError<ClaimError>),
+    /// Two claims have the same identifier.
+    #[error("duplicate claim identifier")]
+    DuplicateId,
+}
+
+/// A line that does not match the fabric claim grammar.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum ClaimError {
     /// A claim does not follow the required punctuation and field structure.
     #[error("expected a claim in the form #id @ left,top: widthxheight")]
     Syntax,
@@ -37,9 +46,6 @@ pub enum ParseError {
     /// A rectangle endpoint exceeds the coordinate range.
     #[error("claim endpoint exceeds the unsigned 32-bit range")]
     Overflow,
-    /// Two claims have the same identifier.
-    #[error("duplicate claim identifier")]
-    DuplicateId,
 }
 
 /// Parses positive, uniquely identified rectangles with nonnegative offsets.
@@ -48,53 +54,59 @@ pub enum ParseError {
 ///
 /// Returns [`ParseError`] for empty input, malformed claims, duplicate IDs or overflowing endpoints.
 pub fn parse(input: &str) -> Result<Puzzle, ParseError> {
-    let mut claims = Vec::new();
-    let mut ids = HashSet::new();
-    for line in input.lines() {
+    let claims = aoc_core::parse_records(input, |line| {
         let (id, rectangle) = line
             .strip_prefix('#')
             .and_then(|rest| rest.split_once(" @ "))
-            .ok_or(ParseError::Syntax)?;
-        let id = NonZeroU32::new(number(id)?).ok_or(ParseError::Zero)?;
-        let (offset, dimensions) = rectangle.split_once(": ").ok_or(ParseError::Syntax)?;
-        let (left, top) = offset.split_once(',').ok_or(ParseError::Syntax)?;
-        let (width, height) = dimensions.split_once('x').ok_or(ParseError::Syntax)?;
+            .ok_or(ClaimError::Syntax)?;
+        let id = NonZeroU32::new(number(id)?).ok_or(ClaimError::Zero)?;
+        let (offset, dimensions) = rectangle.split_once(": ").ok_or(ClaimError::Syntax)?;
+        let (left, top) = offset.split_once(',').ok_or(ClaimError::Syntax)?;
+        let (width, height) = dimensions.split_once('x').ok_or(ClaimError::Syntax)?;
         let x = extent(left, width)?;
         let y = extent(top, height)?;
-        if !ids.insert(id) {
+        Ok(Claim { id, x, y })
+    })?;
+    let mut ids = HashSet::new();
+    for claim in &claims {
+        if !ids.insert(claim.id) {
             return Err(ParseError::DuplicateId);
         }
-        claims.push(Claim { id, x, y });
-    }
-    if claims.is_empty() {
-        return Err(ParseError::Empty);
     }
     Ok(Puzzle { claims })
 }
 
-fn number(text: &str) -> Result<u32, ParseError> {
+fn number(text: &str) -> Result<u32, ClaimError> {
     if text.is_empty() || !text.bytes().all(|byte| byte.is_ascii_digit()) {
-        return Err(ParseError::Syntax);
+        return Err(ClaimError::Syntax);
     }
     Ok(text.parse()?)
 }
 
-fn extent(offset: &str, length: &str) -> Result<Range<u32>, ParseError> {
+fn extent(offset: &str, length: &str) -> Result<Range<u32>, ClaimError> {
     let start = number(offset)?;
-    let length = NonZeroU32::new(number(length)?).ok_or(ParseError::Zero)?;
+    let length = NonZeroU32::new(number(length)?).ok_or(ClaimError::Zero)?;
     let end = start
         .checked_add(length.get())
-        .ok_or(ParseError::Overflow)?;
+        .ok_or(ClaimError::Overflow)?;
     Ok(start..end)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ParseError, parse};
+    use super::{ClaimError, ParseError, parse};
+
+    fn line_error(source: ClaimError, line: usize) -> ParseError {
+        ParseError::Records(aoc_core::RecordsError::Line { line, source })
+    }
 
     #[test]
     fn empty_input_is_rejected() {
-        assert_eq!(parse(""), Err(ParseError::Empty), "no claims");
+        assert_eq!(
+            parse(""),
+            Err(ParseError::Records(aoc_core::RecordsError::Empty)),
+            "no claims"
+        );
     }
 
     #[test]
@@ -117,14 +129,27 @@ mod tests {
             "#1 @ 0,0: 1x",
             "#1 @ 0,0: 1x1\n\n",
         ] {
-            assert_eq!(parse(text), Err(ParseError::Syntax), "{text:?}");
+            let line = if text.contains('\n') && text != "\n" {
+                2
+            } else {
+                1
+            };
+            assert_eq!(
+                parse(text),
+                Err(line_error(ClaimError::Syntax, line)),
+                "{text:?}"
+            );
         }
         for text in ["#0 @ 0,0: 1x1", "#1 @ 0,0: 0x1", "#1 @ 0,0: 1x0"] {
-            assert_eq!(parse(text), Err(ParseError::Zero), "{text:?}");
+            assert_eq!(
+                parse(text),
+                Err(line_error(ClaimError::Zero, 1)),
+                "{text:?}"
+            );
         }
         assert_eq!(
             parse("#1 @ 4294967295,0: 1x1"),
-            Err(ParseError::Overflow),
+            Err(line_error(ClaimError::Overflow, 1)),
             "endpoint overflow"
         );
         assert_eq!(
@@ -133,7 +158,13 @@ mod tests {
             "IDs identify distinct claims"
         );
         assert!(
-            matches!(parse("#4294967296 @ 0,0: 1x1"), Err(ParseError::Integer(_))),
+            matches!(
+                parse("#4294967296 @ 0,0: 1x1"),
+                Err(ParseError::Records(aoc_core::RecordsError::Line {
+                    line: 1,
+                    source: ClaimError::Integer(_)
+                }))
+            ),
             "integer overflow retains its cause"
         );
     }
@@ -147,7 +178,11 @@ mod tests {
                     let puzzle = parse(&text).unwrap();
                     assert_eq!(puzzle.claims[0].x, offset..end, "{text}");
                 } else {
-                    assert_eq!(parse(&text), Err(ParseError::Overflow), "{text}");
+                    assert_eq!(
+                        parse(&text),
+                        Err(line_error(ClaimError::Overflow, 1)),
+                        "{text}"
+                    );
                 }
             }
         }
