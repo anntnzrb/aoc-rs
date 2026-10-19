@@ -415,5 +415,11 @@ and refresh statements with `MAIN/target/release/aoc-ops` from MAIN, never with
 - Bare autommit may split one step (such as a part's parser change and its
   solver) into several atomic commits. That satisfies "one commit per step"
   as long as no commit mixes two steps; never rewrite history to merge them.
+- `record` refuses a dirty tracked tree, including the CSV row that a previous
+  `record` just appended. When recording several days, commit each day's row
+  before running the next `record`.
+- Shared helpers replace boilerplate in later days, not necessarily in the
+  days migrated to them: migrated days gain a per-line error type and nested
+  test matches. Judge a helper by what new days no longer write.
 
 </repository_guidelines>
