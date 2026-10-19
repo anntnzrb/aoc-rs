@@ -412,5 +412,8 @@ and refresh statements with `MAIN/target/release/aoc-ops` from MAIN, never with
   Commit the lockfile with the scaffold.
 - Gate files changed in a reviewed diff fail governance; land such a change
   on its own commit and gate later work against a base after it.
+- Bare autommit may split one step (such as a part's parser change and its
+  solver) into several atomic commits. That satisfies "one commit per step"
+  as long as no commit mixes two steps; never rewrite history to merge them.
 
 </repository_guidelines>
