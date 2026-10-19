@@ -16,13 +16,13 @@ impl Puzzle<'_> {
     }
 }
 
-/// Input that does not match the puzzle's grammar.
+/// Failure to parse the input's nonempty sequence of box identifiers.
+pub type ParseError = aoc_core::RecordsError<IdError>;
+
+/// A line that does not match the box identifier grammar.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
-pub enum ParseError {
-    /// The input holds no lines.
-    #[error("input is empty")]
-    Empty,
+pub enum IdError {
     /// An identifier is empty or contains a non-lowercase ASCII letter.
     #[error("expected a nonempty lowercase box identifier")]
     InvalidId,
@@ -34,24 +34,18 @@ pub enum ParseError {
 ///
 /// Returns [`ParseError`] for empty input or malformed identifiers.
 pub fn parse(input: &str) -> Result<Puzzle<'_>, ParseError> {
-    let lines = input
-        .lines()
-        .map(|line| {
-            if line.is_empty() || !line.bytes().all(|byte| byte.is_ascii_lowercase()) {
-                return Err(ParseError::InvalidId);
-            }
-            Ok(line)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    if lines.is_empty() {
-        return Err(ParseError::Empty);
-    }
+    let lines = aoc_core::parse_records(input, |line| {
+        if line.is_empty() || !line.bytes().all(|byte| byte.is_ascii_lowercase()) {
+            return Err(IdError::InvalidId);
+        }
+        Ok(line)
+    })?;
     Ok(Puzzle { lines })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ParseError, parse};
+    use super::{IdError, ParseError, parse};
 
     #[test]
     fn empty_input_is_rejected() {
@@ -67,7 +61,16 @@ mod tests {
     #[test]
     fn malformed_identifiers_are_rejected() {
         for input in ["\n", "a\n\nb", "a b", "Ab", "a1", "é", "a "] {
-            assert_eq!(parse(input), Err(ParseError::InvalidId), "{input:?}");
+            assert!(
+                matches!(
+                    parse(input),
+                    Err(ParseError::Line {
+                        source: IdError::InvalidId,
+                        ..
+                    })
+                ),
+                "{input:?}"
+            );
         }
     }
 
