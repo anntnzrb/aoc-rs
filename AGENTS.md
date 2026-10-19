@@ -221,8 +221,8 @@ opportunities without expanding worker ownership.
 
 ## Status
 
-The workspace runs on x86_64 Linux; macOS is not yet verified. Solved: 2018
-days 1 through 10 (crate `aoc18`). Done: the Nix devshell, the Rust gate assets,
+The workspace runs on x86_64 Linux; macOS is not yet verified. Solved: all of
+2018 (crate `aoc18`). Done: the Nix devshell, the Rust gate assets,
 `aoc-core` (calendar, answers, stdin runner) and `aoc-ops` with `fetch`,
 `puzzle`, `submit`, `new`, `run`, `test`, `bench`, `record` and `doc`, all
 exercised live, including real submissions. The `origin` publishing remote
@@ -422,6 +422,15 @@ and refresh statements with `MAIN/target/release/aoc-ops` from MAIN, never with
 - Bare autommit may split one step (such as a part's parser change and its
   solver) into several atomic commits. That satisfies "one commit per step"
   as long as no commit mixes two steps; never rewrite history to merge them.
+  It also infers the scope from recent history, so `y18dDD`/`y18` appear
+  beside `y2018dDD`/`y2018`; both name the same year and day. Leave them.
+- Submit an answer from the run's captured stdout (for example
+  `"$(sed -n 1p out.txt)"`), never by retyping displayed output: compacted
+  tool output caused one wrongly submitted answer. Lit-pixel answers are the
+  exception, read from the raster file itself.
+- A puzzle without statement examples (such as a program-analysis day) has an
+  empty fixture directory; its unit tests and real-input agreement carry the
+  check.
 - `record` refuses a dirty tracked tree, including the CSV row that a previous
   `record` just appended. When recording several days, commit each day's row
   before running the next `record`.
