@@ -1,4 +1,4 @@
-// approach: Sort guard events, tally each half-open sleep interval, choose the sleepiest guard's peak minute.
+// approach: Sort guard events, tally half-open sleep intervals, select peaks by total sleep and by frequency.
 // cost: O(n log n + s log g + 60s + 60g) time, O(n + 60g) memory; 2 full input passes plus sorting.
 // trade: Fixed midnight histograms make interval endpoints explicit; sorting retains unordered records in memory.
 
@@ -57,7 +57,7 @@ fn peak(guard: &GuardSleep) -> Result<(u64, u64), ParseError> {
     Ok((minute, count))
 }
 
-/// Selects the guard with the most total sleep and that guard's most frequent minute.
+/// Selects the sleepiest guard's peak minute and the globally most frequent guard/minute pair.
 ///
 /// Ties select the lowest guard identifier, then the earliest minute.
 ///
@@ -67,16 +67,31 @@ fn peak(guard: &GuardSleep) -> Result<(u64, u64), ParseError> {
 pub fn solve(input: &str) -> Result<Answers, ParseError> {
     let puzzle = parse(input)?;
     let guards = histogram(&puzzle)?;
-    let (&id, guard) = guards
+    let (&sleepiest_id, sleepiest) = guards
         .iter()
         .max_by_key(|&(id, guard)| (guard.total, Reverse(id)))
         .ok_or(ParseError::NoSleep)?;
-    let (minute, _) = peak(guard)?;
-    let part1 = NonZeroU64::from(id)
+    let (sleepiest_minute, _) = peak(sleepiest)?;
+    let part1 = NonZeroU64::from(sleepiest_id)
+        .get()
+        .checked_mul(sleepiest_minute)
+        .ok_or(ParseError::Overflow)?;
+    let (id, minute, _) = guards
+        .iter()
+        .flat_map(|(&id, guard)| {
+            guard
+                .minutes
+                .iter()
+                .zip(0_u64..)
+                .map(move |(&count, minute)| (id, minute, count))
+        })
+        .max_by_key(|&(id, minute, count)| (count, Reverse(id), Reverse(minute)))
+        .ok_or(ParseError::NoSleep)?;
+    let part2 = NonZeroU64::from(id)
         .get()
         .checked_mul(minute)
         .ok_or(ParseError::Overflow)?;
-    Ok(Answers::new(part1, 0))
+    Ok(Answers::new(part1, part2))
 }
 
 #[cfg(test)]
@@ -89,7 +104,7 @@ mod tests {
         let input = "[1518-01-01 00:00] Guard #7 begins shift\n[1518-01-01 00:10] falls asleep\n[1518-01-01 00:20] wakes up\n[1518-01-02 00:00] Guard #7 begins shift\n[1518-01-02 00:19] falls asleep\n[1518-01-02 00:21] wakes up\n[1518-01-03 00:00] Guard #11 begins shift\n[1518-01-03 00:04] falls asleep\n[1518-01-03 00:05] wakes up\n[1518-01-04 00:00] Guard #11 begins shift\n[1518-01-04 00:04] falls asleep\n[1518-01-04 00:05] wakes up\n[1518-01-05 00:00] Guard #11 begins shift\n[1518-01-05 00:04] falls asleep\n[1518-01-05 00:05] wakes up";
         assert_eq!(
             solve(input).unwrap(),
-            Answers::new(133, 0),
+            Answers::new(133, 44),
             "total sleep, not highest frequency, selects guard"
         );
     }
@@ -103,7 +118,7 @@ mod tests {
                 );
                 assert_eq!(
                     solve(&input).unwrap(),
-                    Answers::new(13 * start, 0),
+                    Answers::new(13 * start, 13 * start),
                     "[{start}, {end}) selects earliest tied minute"
                 );
             }
@@ -115,7 +130,7 @@ mod tests {
         let input = "[1518-01-01 00:00] Guard #4294967295 begins shift\n[1518-01-01 00:58] falls asleep\n[1518-01-01 00:59] wakes up";
         assert_eq!(
             solve(input).unwrap(),
-            Answers::new(249_108_103_110_u64, 0),
+            Answers::new(249_108_103_110_u64, 249_108_103_110_u64),
             "answer multiplication is wider than guard identifiers"
         );
         let tied = format!(
@@ -123,13 +138,29 @@ mod tests {
         );
         assert_eq!(
             solve(&tied).unwrap(),
-            Answers::new(174, 0),
+            Answers::new(174, 174),
             "lowest identifier wins tied totals"
         );
         assert_eq!(
             solve("[1518-01-01 00:00] Guard #7 begins shift"),
             Err(ParseError::NoSleep),
             "no fabricated sleeping minute"
+        );
+    }
+
+    #[test]
+    fn disjoint_sleeps_do_not_count_awake_gaps_or_wake_minutes() {
+        let input = "[1518-01-01 00:00] Guard #5 begins shift\n[1518-01-01 00:10] falls asleep\n[1518-01-01 00:11] wakes up\n[1518-01-01 00:12] falls asleep\n[1518-01-01 00:13] wakes up\n[1518-01-02 00:00] Guard #5 begins shift\n[1518-01-02 00:11] falls asleep\n[1518-01-02 00:13] wakes up";
+        assert_eq!(
+            solve(input).unwrap(),
+            Answers::new(60, 60),
+            "minute 12 alone occurs twice"
+        );
+        let reversed = input.lines().rev().collect::<Vec<_>>().join("\n");
+        assert_eq!(
+            solve(&reversed).unwrap(),
+            Answers::new(60, 60),
+            "arbitrary input order preserves both strategies"
         );
     }
 }
