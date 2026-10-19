@@ -2,6 +2,7 @@
 
 use std::{collections::HashSet, num::NonZeroU32, ops::Range};
 
+pub mod dense_grid;
 pub mod primary;
 
 /// The fabric claims in their input order.
