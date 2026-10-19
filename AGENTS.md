@@ -222,7 +222,7 @@ opportunities without expanding worker ownership.
 ## Status
 
 The workspace runs on x86_64 Linux; macOS is not yet verified. Solved: 2018
-days 1 through 4 (crate `aoc18`). Done: the Nix devshell, the Rust gate assets,
+days 1 through 10 (crate `aoc18`). Done: the Nix devshell, the Rust gate assets,
 `aoc-core` (calendar, answers, stdin runner) and `aoc-ops` with `fetch`,
 `puzzle`, `submit`, `new`, `run`, `test`, `bench`, `record` and `doc`, all
 exercised live, including real submissions. The `origin` publishing remote
@@ -330,6 +330,9 @@ docs/journal/YEAR.md           Learning log, created by hand on a year's first s
   example has no part-2 answer (the part-2 question is undefined for it), the
   solution renders part 1 only for that input instead of inventing a value or
   failing, so every part-1 fixture stays valid.
+- An answer drawn as letters (lit-pixel glyphs) renders its computed raster on
+  its answer line, rows joined by `/`, `#` lit and `.` dark. The submitter reads
+  the glyphs; never hardcode the letters or add OCR without a request.
 
 ## Commands
 
