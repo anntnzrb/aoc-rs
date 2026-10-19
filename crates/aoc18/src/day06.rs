@@ -1,62 +1,80 @@
-//! Advent of Code 2018, day 6: the puzzle's domain model and parser.
+//! Validated integer sites for Manhattan-distance regions.
 
 pub mod primary;
 
-/// The puzzle input, one entry per line in input order.
+/// An integer coordinate site.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Point {
+    x: i32,
+    y: i32,
+}
+
+/// Nonempty coordinate list in input order.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Puzzle<'a> {
-    lines: Vec<&'a str>,
+pub struct Puzzle {
+    points: Vec<Point>,
 }
 
-impl Puzzle<'_> {
-    /// Returns the input lines in their original order.
-    #[must_use]
-    pub fn lines(&self) -> &[&str] {
-        &self.lines
-    }
+/// Malformed coordinate record.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum PointError {
+    /// Missing coordinate separator.
+    #[error("expected x, y")]
+    Syntax,
+    /// An integer is invalid or outside the coordinate range.
+    #[error("invalid coordinate")]
+    Integer(#[from] std::num::ParseIntError),
 }
 
-/// Failure to parse a nonempty sequence of input lines.
-pub type ParseError = aoc_core::RecordsError<std::convert::Infallible>;
+/// Input parsing failure, retaining line and cause.
+pub type ParseError = aoc_core::RecordsError<PointError>;
 
-/// Parses the puzzle input into its domain model.
+/// Parses a nonempty list of signed 32-bit coordinate pairs.
 ///
 /// # Errors
-///
-/// Returns [`ParseError::Empty`] when the input holds no lines.
-pub fn parse(input: &str) -> Result<Puzzle<'_>, ParseError> {
-    let lines = aoc_core::parse_records(input, Ok)?;
-    Ok(Puzzle { lines })
+/// Returns [`ParseError`] for empty input or invalid coordinate records.
+pub fn parse(input: &str) -> Result<Puzzle, ParseError> {
+    let points = aoc_core::parse_records(input, |line| {
+        let (x, y) = line.split_once(", ").ok_or(PointError::Syntax)?;
+        Ok(Point {
+            x: x.parse()?,
+            y: y.parse()?,
+        })
+    })?;
+    Ok(Puzzle { points })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ParseError, parse};
+    use super::{ParseError, Point, parse};
 
     #[test]
     fn empty_input_is_rejected() {
-        assert_eq!(parse(""), Err(ParseError::Empty), "no lines");
+        assert!(matches!(parse(""), Err(ParseError::Empty)), "empty input");
     }
 
     #[test]
     fn lines_keep_their_order() {
-        let puzzle = parse("b\na\n").unwrap();
-        assert_eq!(puzzle.lines(), ["b", "a"], "input order");
+        assert_eq!(
+            parse("-2, 3\n4, -5\n").unwrap().points,
+            [Point { x: -2, y: 3 }, Point { x: 4, y: -5 }],
+            "site order"
+        );
+        for invalid in ["1 2", "1, a", "1, 2, 3", "2147483648, 0"] {
+            assert!(
+                matches!(parse(invalid), Err(ParseError::Line { .. })),
+                "invalid site {invalid}"
+            );
+        }
     }
 
     #[test]
     fn lines_borrow_the_input_and_strip_crlf() {
-        let input = String::from("b\r\n\r\na\r\n");
-        let puzzle = parse(&input).unwrap();
         assert_eq!(
-            puzzle.lines(),
-            ["b", "", "a"],
-            "line terminators and empty records"
-        );
-        assert_eq!(
-            puzzle.lines()[0].as_ptr(),
-            input.as_ptr(),
-            "borrowed storage"
+            parse("2, 3\r\n").unwrap().points,
+            [Point { x: 2, y: 3 }],
+            "CRLF terminator"
         );
     }
 }
