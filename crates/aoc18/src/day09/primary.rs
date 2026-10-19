@@ -1,8 +1,8 @@
-// approach: rotate a deque to keep the current marble at its back
-// cost: O(m+p) time, O(m+p) memory, one input pass
-// trade: bounded rotations implement circular placement without pointers or indexed links
+// approach: keep the current marble at the back of a deque, moving single marbles between its ends
+// cost: O(m+p) time, O(m+p) memory (4 bytes per marble), one input pass
+// trade: end-to-end pops and pushes avoid generic rotation copies; marbles must fit u32
 
-//! Circular marble simulation with constant-distance deque rotations.
+//! Circular marble simulation moving single marbles between the ends of a deque.
 
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
@@ -24,30 +24,49 @@ pub enum SolveError {
     /// Storage cannot be reserved.
     #[error("cannot allocate marble game storage")]
     Allocation(#[from] std::collections::TryReserveError),
+    /// The last marble does not fit the circle's 32-bit storage.
+    #[error("last marble exceeds the supported range")]
+    Marbles(#[from] std::num::TryFromIntError),
     /// A required marble or player is absent.
     #[error("invalid marble game state")]
     State,
 }
 
+/// Moves the front marble to the back, advancing the current marble clockwise.
+fn clockwise(circle: &mut VecDeque<u32>) -> Result<(), SolveError> {
+    let front = circle.pop_front().ok_or(SolveError::State)?;
+    circle.push_back(front);
+    Ok(())
+}
+
 fn high_score(players: NonZeroUsize, last: u64) -> Result<u64, SolveError> {
+    let last = u32::try_from(last)?;
     let mut scores = Vec::new();
     scores.try_reserve_exact(players.get())?;
     scores.resize(players.get(), 0_u64);
-    let mut circle = VecDeque::from([0_u64]);
+    // One up-front reservation replaces repeated growth copies of the circle.
+    let capacity = usize::try_from(last)?
+        .checked_add(1)
+        .ok_or(SolveError::Overflow)?;
+    let mut circle = VecDeque::new();
+    circle.try_reserve_exact(capacity)?;
+    circle.push_back(0_u32);
     let mut player = 0_usize;
     for marble in 1..=last {
         if marble.is_multiple_of(23) {
-            circle.rotate_right(7);
+            for _ in 0..7 {
+                let back = circle.pop_back().ok_or(SolveError::State)?;
+                circle.push_front(back);
+            }
             let removed = circle.pop_back().ok_or(SolveError::State)?;
             let score = scores.get_mut(player).ok_or(SolveError::State)?;
             *score = score
-                .checked_add(marble)
-                .and_then(|value| value.checked_add(removed))
+                .checked_add(u64::from(marble))
+                .and_then(|value| value.checked_add(u64::from(removed)))
                 .ok_or(SolveError::Overflow)?;
-            circle.rotate_left(1);
+            clockwise(&mut circle)?;
         } else {
-            circle.rotate_left(1);
-            circle.try_reserve(1)?;
+            clockwise(&mut circle)?;
             circle.push_back(marble);
         }
         player = player.checked_add(1).ok_or(SolveError::Overflow)?;
@@ -76,8 +95,20 @@ pub fn solve(input: &str) -> Result<Answers, SolveError> {
 
 #[cfg(test)]
 mod tests {
-    use super::high_score;
+    use super::{SolveError, high_score};
     use std::num::NonZeroUsize;
+
+    #[test]
+    fn marbles_beyond_32_bits_are_rejected() {
+        let players = NonZeroUsize::new(1).unwrap();
+        assert!(
+            matches!(
+                high_score(players, u64::from(u32::MAX) + 1),
+                Err(SolveError::Marbles(_))
+            ),
+            "the circle stores u32 marbles"
+        );
+    }
 
     #[test]
     fn score_begins_on_first_special_marble() {
