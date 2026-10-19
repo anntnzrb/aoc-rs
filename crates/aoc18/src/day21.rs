@@ -69,6 +69,9 @@ pub fn parse(input: &str) -> Result<Puzzle, ParseError> {
         return Err(ParseError::Structure);
     };
     let ip = u64::try_from(program.binding)?;
+    if flag == 0 || flag == ip || candidate == ip {
+        return Err(ParseError::Structure);
+    }
     if branch.op != Op::Add(Mode::Register)
         || branch.args != [flag, ip, ip]
         || restart.op != Op::Set(Mode::Immediate)
