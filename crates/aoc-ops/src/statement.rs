@@ -15,10 +15,14 @@ struct Tag<'a> {
     attributes: &'a str,
 }
 
-/// Finds the next tag at or after `from`; text without a closing `>` holds no tag.
+/// Finds the next tag at or after `from`. As in HTML, `<` opens a tag only before a letter, `/`
+/// or `!`; any other `<` is text. Text without a closing `>` holds no tag.
 fn next_tag(html: &str, from: usize) -> Option<Tag<'_>> {
     let rest = html.get(from..)?;
-    let open = rest.find('<')?;
+    let open = rest.match_indices('<').find_map(|(index, _)| {
+        let follower = rest.get(index.checked_add(1)?..)?.chars().next()?;
+        (follower.is_ascii_alphabetic() || matches!(follower, '/' | '!')).then_some(index)
+    })?;
     let start = from.checked_add(open)?;
     let body_start = start.checked_add(1)?;
     let close = html.get(body_start..)?.find('>')?;
@@ -211,6 +215,16 @@ mod tests {
             plain_text(html),
             "--- T ---\n\na <b> & c!A\n\n- one\n\n- two\n\nx\ny\n&bogus; & z\n",
             "tags become breaks, entities decode, runs of blank lines collapse"
+        );
+    }
+
+    #[test]
+    fn raw_angle_brackets_outside_tags_stay_text() {
+        let html = "<pre><code>p=< 9,  1> v=<-1, 0>\na < b > c</code></pre>";
+        assert_eq!(
+            plain_text(html),
+            "p=< 9,  1> v=<-1, 0>\na < b > c\n",
+            "a `<` not followed by a letter, `/` or `!` opens no tag"
         );
     }
 
