@@ -1,6 +1,7 @@
 //! Signed frequency changes in the order they must be applied.
 
 pub mod primary;
+pub mod residue_buckets;
 
 /// Validated changes, one signed integer per input line.
 #[derive(Debug, Clone, PartialEq, Eq)]

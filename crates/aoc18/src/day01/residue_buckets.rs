@@ -1,0 +1,19 @@
+// approach: TODO
+// cost: TODO
+// trade: TODO against the primary's measurements
+
+//! Advent of Code 2018, day 1: the `residue_buckets` exploration.
+
+use aoc_core::Answers;
+
+use super::{ParseError, parse};
+
+/// Solves both parts; an unfinished part renders as `0`.
+///
+/// # Errors
+///
+/// Returns [`ParseError`] when the input does not match the puzzle's grammar.
+pub fn solve(input: &str) -> Result<Answers, ParseError> {
+    let _puzzle = parse(input)?;
+    Ok(Answers::new(0, 0))
+}
