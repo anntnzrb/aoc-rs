@@ -1,8 +1,8 @@
-// approach: Count each letter per box, then multiply the counts of boxes with pairs and triples.
-// cost: O(n L) time, O(n) borrowed identifiers and O(1) counters; two full input passes.
-// trade: A fixed byte histogram avoids per-box allocation; checked counts keep overflow explicit.
+// approach: Count exact letter multiplicities, then find the pair with one positional mismatch.
+// cost: O(n² L) time, O(n + L) memory; parse and checksum passes, then buffered ID pairs.
+// trade: Direct pair comparisons avoid signature allocation and stop after two mismatches.
 
-//! Compute the inventory checksum from exact letter multiplicities.
+//! Compute the checksum and recover common letters from the matching box identifiers.
 
 use aoc_core::Answers;
 
@@ -20,7 +20,7 @@ pub enum SolveError {
     Overflow,
 }
 
-/// Solves the checksum; the unfinished second part renders as `0`.
+/// Solves both parts, omitting the second answer when no qualifying pair exists.
 ///
 /// # Errors
 ///
@@ -44,7 +44,35 @@ pub fn solve(input: &str) -> Result<Answers, SolveError> {
             .ok_or(SolveError::Overflow)?;
     }
     let checksum = pairs.checked_mul(triples).ok_or(SolveError::Overflow)?;
-    Ok(Answers::new(checksum, 0))
+    Ok(common_letters(puzzle.lines()).map_or_else(
+        || Answers::part1_only(checksum),
+        |common| Answers::new(checksum, common),
+    ))
+}
+
+fn common_letters(mut ids: &[&str]) -> Option<String> {
+    while let Some((id, rest)) = ids.split_first() {
+        for other in rest {
+            if id.len() == other.len()
+                && id
+                    .bytes()
+                    .zip(other.bytes())
+                    .filter(|(a, b)| a != b)
+                    .take(2)
+                    .count()
+                    == 1
+            {
+                return Some(
+                    id.bytes()
+                        .zip(other.bytes())
+                        .filter_map(|(a, b)| (a == b).then_some(char::from(a)))
+                        .collect(),
+                );
+            }
+        }
+        ids = rest;
+    }
+    None
 }
 
 #[cfg(test)]
@@ -57,18 +85,46 @@ mod tests {
     fn exact_multiplicities_count_each_box_once() {
         assert_eq!(
             solve("aabb\nccc\nddeee\nffff").unwrap(),
-            Answers::new(4, 0),
+            Answers::part1_only(4),
             "two pair boxes and two triple boxes"
         );
         assert_eq!(
             solve("aaaa\nbbbbb\nxyz").unwrap(),
-            Answers::new(0, 0),
+            Answers::part1_only(0),
             "larger multiplicities do not qualify"
         );
         assert_eq!(
             solve("mmnnnooo").unwrap(),
-            Answers::new(1, 0),
+            Answers::part1_only(1),
             "one box can qualify for both counts"
+        );
+    }
+
+    #[test]
+    fn only_one_positional_difference_qualifies() {
+        for (input, expected) in [
+            ("abc\nxbc", "bc"),
+            ("abc\naxc", "ac"),
+            ("abc\nabx", "ab"),
+            ("abc\nabc\naxc", "ac"),
+        ] {
+            assert_eq!(
+                solve(input).unwrap(),
+                Answers::new(0, expected),
+                "{input:?}"
+            );
+        }
+        for input in ["abc\nabc", "abc\naxy", "abc\nabcd", "abc\nxy"] {
+            assert_eq!(solve(input).unwrap(), Answers::part1_only(0), "{input:?}");
+        }
+    }
+
+    #[test]
+    fn single_letter_ids_have_empty_common_letters() {
+        assert_eq!(
+            solve("a\nb").unwrap(),
+            Answers::new(0, ""),
+            "the mismatch is the entire identifier"
         );
     }
 }
