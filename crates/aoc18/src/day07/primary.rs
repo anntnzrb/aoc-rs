@@ -22,6 +22,9 @@ pub enum SolveError {
     /// Dependencies prevent all remaining steps from starting.
     #[error("step dependencies contain a cycle")]
     Cycle,
+    /// Completion times exceed the supported range.
+    #[error("completion time overflow")]
+    Overflow,
 }
 
 fn graph(puzzle: &Puzzle) -> Graph {
@@ -52,22 +55,70 @@ fn order(graph: &Graph) -> Result<String, SolveError> {
     Ok(result)
 }
 
-/// Orders assembly steps; unfinished part two renders `0`.
+fn duration(graph: &Graph, workers: usize, base_seconds: u64) -> Result<u64, SolveError> {
+    let mut complete = BTreeSet::new();
+    let mut active = BTreeMap::new();
+    let mut seconds = 0_u64;
+    while complete.len() < graph.len() {
+        for (&step, prerequisites) in graph {
+            if active.len() == workers {
+                break;
+            }
+            if !complete.contains(&step)
+                && !active.contains_key(&step)
+                && prerequisites.is_subset(&complete)
+            {
+                let offset = step.checked_sub(b'A').ok_or(SolveError::Overflow)?;
+                let finish = seconds
+                    .checked_add(base_seconds)
+                    .and_then(|time| time.checked_add(u64::from(offset)))
+                    .and_then(|time| time.checked_add(1))
+                    .ok_or(SolveError::Overflow)?;
+                active.insert(step, finish);
+            }
+        }
+        seconds = active.values().copied().min().ok_or(SolveError::Cycle)?;
+        // All simultaneous completions release prerequisites before the next assignment.
+        active.retain(|&step, finish| {
+            if *finish == seconds {
+                complete.insert(step);
+                false
+            } else {
+                true
+            }
+        });
+    }
+    Ok(seconds)
+}
+
+/// Orders assembly steps and schedules them with five workers and a 60-second base.
 ///
 /// # Errors
 /// Returns [`SolveError`] for invalid instructions or cyclic dependencies.
 pub fn solve(input: &str) -> Result<Answers, SolveError> {
     let puzzle = parse(input)?;
-    Ok(Answers::new(order(&graph(&puzzle))?, 0))
+    let graph = graph(&puzzle);
+    Ok(Answers::new(order(&graph)?, duration(&graph, 5, 60)?))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{SolveError, solve};
+    use super::{SolveError, duration, graph, order, solve};
+    use crate::day07::parse;
 
     #[test]
     fn newly_available_steps_compete_alphabetically() {
-        assert_eq!(solve("Step B must be finished before step A can begin.\nStep C must be finished before step D can begin.\n").unwrap(), aoc_core::Answers::new("BACD", 0), "newly ready A precedes C");
+        let puzzle = parse("Step B must be finished before step A can begin.\nStep C must be finished before step D can begin.\n").unwrap();
+        assert_eq!(
+            order(&graph(&puzzle)).unwrap(),
+            "BACD",
+            "newly ready A precedes C"
+        );
+        assert_eq!(
+            duration(&graph(&puzzle), 2, 0).unwrap(),
+            7,
+            "parallel chains finish independently"
+        );
         assert!(
             matches!(
                 solve(
