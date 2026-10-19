@@ -24,6 +24,9 @@ pub enum ParseError {
     /// Device arithmetic overflowed.
     #[error("device arithmetic overflow")]
     Overflow,
+    /// Observations do not determine a unique opcode assignment.
+    #[error("opcode assignment is inconsistent or ambiguous")]
+    Mapping,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
