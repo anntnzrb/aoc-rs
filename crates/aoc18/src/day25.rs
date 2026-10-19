@@ -1,62 +1,117 @@
-//! Advent of Code 2018, day 25: the puzzle's domain model and parser.
+//! Four-dimensional fixed points parsed from signed comma-separated coordinates.
 
 pub mod primary;
 
-/// The puzzle input, one entry per line in input order.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Puzzle<'a> {
-    lines: Vec<&'a str>,
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Point([i32; 4]);
 
-impl Puzzle<'_> {
-    /// Returns the input lines in their original order.
-    #[must_use]
-    pub fn lines(&self) -> &[&str] {
-        &self.lines
+impl Point {
+    fn is_near(self, other: Self) -> bool {
+        self.0
+            .into_iter()
+            .zip(other.0)
+            .try_fold(3_u32, |budget, (a, b)| budget.checked_sub(a.abs_diff(b)))
+            .is_some()
     }
 }
 
-/// Failure to parse a nonempty sequence of input lines.
-pub type ParseError = aoc_core::RecordsError<std::convert::Infallible>;
+/// Nonempty observations of four-dimensional fixed points.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Puzzle {
+    points: Vec<Point>,
+}
 
-/// Parses the puzzle input into its domain model.
+/// An invalid four-dimensional coordinate record.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum PointError {
+    /// A record has something other than four coordinates.
+    #[error("expected four comma-separated coordinates")]
+    Dimensions,
+    /// A coordinate is not a signed 32-bit integer.
+    #[error("invalid point coordinate")]
+    Integer(#[from] std::num::ParseIntError),
+}
+
+/// Input failure retaining the record number and underlying cause.
+pub type ParseError = aoc_core::RecordsError<PointError>;
+
+/// Parses nonempty fixed-point observations, preserving their input order.
 ///
 /// # Errors
-///
-/// Returns [`ParseError::Empty`] when the input holds no lines.
-pub fn parse(input: &str) -> Result<Puzzle<'_>, ParseError> {
-    let lines = aoc_core::parse_records(input, Ok)?;
-    Ok(Puzzle { lines })
+/// Returns [`ParseError`] for empty input, incorrect dimensions or invalid integers.
+pub fn parse(input: &str) -> Result<Puzzle, ParseError> {
+    let points = aoc_core::parse_records(input, |line| {
+        let mut fields = line.split(',');
+        let mut coordinates = [0; 4];
+        for coordinate in &mut coordinates {
+            *coordinate = fields
+                .next()
+                .ok_or(PointError::Dimensions)?
+                .trim()
+                .parse()?;
+        }
+        if fields.next().is_some() {
+            return Err(PointError::Dimensions);
+        }
+        Ok(Point(coordinates))
+    })?;
+    Ok(Puzzle { points })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ParseError, parse};
+    use super::{ParseError, Point, PointError, parse};
 
     #[test]
     fn empty_input_is_rejected() {
-        assert_eq!(parse(""), Err(ParseError::Empty), "no lines");
+        assert!(matches!(parse(""), Err(ParseError::Empty)), "no points");
     }
 
     #[test]
     fn lines_keep_their_order() {
-        let puzzle = parse("b\na\n").unwrap();
-        assert_eq!(puzzle.lines(), ["b", "a"], "input order");
+        let puzzle = parse("-1,2,-3,4\n5,-6,7,-8\n").unwrap();
+        assert_eq!(
+            puzzle.points,
+            [Point([-1, 2, -3, 4]), Point([5, -6, 7, -8])],
+            "coordinate and point order"
+        );
     }
 
     #[test]
     fn lines_borrow_the_input_and_strip_crlf() {
-        let input = String::from("b\r\n\r\na\r\n");
-        let puzzle = parse(&input).unwrap();
+        let puzzle = parse(" -1, 2, -3, 4\r\n").unwrap();
         assert_eq!(
-            puzzle.lines(),
-            ["b", "", "a"],
-            "line terminators and empty records"
+            puzzle.points,
+            [Point([-1, 2, -3, 4])],
+            "whitespace and CRLF"
         );
-        assert_eq!(
-            puzzle.lines()[0].as_ptr(),
-            input.as_ptr(),
-            "borrowed storage"
+    }
+
+    #[test]
+    fn malformed_points_retain_line_and_cause() {
+        assert!(
+            matches!(
+                parse("1,2,3,4\n1,2,3"),
+                Err(ParseError::Line {
+                    line: 2,
+                    source: PointError::Dimensions
+                })
+            ),
+            "missing dimension"
         );
+        assert!(
+            matches!(
+                parse("1,2,3,4,5"),
+                Err(ParseError::Line {
+                    source: PointError::Dimensions,
+                    ..
+                })
+            ),
+            "extra dimension"
+        );
+        for invalid in ["", "a,2,3,4", "1,,3,4", "2147483648,0,0,0"] {
+            assert!(parse(invalid).is_err(), "invalid point {invalid:?}");
+        }
     }
 }
