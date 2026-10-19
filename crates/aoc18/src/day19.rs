@@ -1,62 +1,44 @@
-//! Advent of Code 2018, day 19: the puzzle's domain model and parser.
+//! A six-register background program with instruction-pointer-directed control flow.
 
 pub mod primary;
 
-/// The puzzle input, one entry per line in input order.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Puzzle<'a> {
-    lines: Vec<&'a str>,
-}
+use crate::device::{DeviceError, Program};
 
-impl Puzzle<'_> {
-    /// Returns the input lines in their original order.
-    #[must_use]
-    pub fn lines(&self) -> &[&str] {
-        &self.lines
-    }
-}
-
-/// Failure to parse a nonempty sequence of input lines.
-pub type ParseError = aoc_core::RecordsError<std::convert::Infallible>;
-
-/// Parses the puzzle input into its domain model.
+/// Parses a bound instruction-pointer program.
 ///
 /// # Errors
-///
-/// Returns [`ParseError::Empty`] when the input holds no lines.
-pub fn parse(input: &str) -> Result<Puzzle<'_>, ParseError> {
-    let lines = aoc_core::parse_records(input, Ok)?;
-    Ok(Puzzle { lines })
+/// Returns an error for malformed instructions or invalid register operands.
+pub fn parse(input: &str) -> Result<Program, DeviceError> {
+    Program::parse(input)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ParseError, parse};
+    use super::parse;
+    use crate::device::{DeviceError, Machine};
 
     #[test]
     fn empty_input_is_rejected() {
-        assert_eq!(parse(""), Err(ParseError::Empty), "no lines");
+        assert!(
+            matches!(parse(""), Err(DeviceError::Syntax(_))),
+            "no declaration"
+        );
     }
 
     #[test]
     fn lines_keep_their_order() {
-        let puzzle = parse("b\na\n").unwrap();
-        assert_eq!(puzzle.lines(), ["b", "a"], "input order");
+        let program = parse("#ip 5\nseti 7 0 0\nmuli 0 3 0").unwrap();
+        let mut machine = Machine::default();
+        while program.step(&mut machine).unwrap() {}
+        assert_eq!(machine.registers[0], 21, "program order");
     }
 
     #[test]
     fn lines_borrow_the_input_and_strip_crlf() {
-        let input = String::from("b\r\n\r\na\r\n");
-        let puzzle = parse(&input).unwrap();
-        assert_eq!(
-            puzzle.lines(),
-            ["b", "", "a"],
-            "line terminators and empty records"
-        );
-        assert_eq!(
-            puzzle.lines()[0].as_ptr(),
-            input.as_ptr(),
-            "borrowed storage"
-        );
+        let program = parse("#ip 5\r\nseti 3 999 0\r\n").unwrap();
+        let mut machine = Machine::default();
+        assert!(program.step(&mut machine).unwrap(), "CRLF parses");
+        assert_eq!(machine.registers[0], 3, "owned parsed instruction");
+        assert!(!program.step(&mut machine).unwrap(), "one instruction");
     }
 }

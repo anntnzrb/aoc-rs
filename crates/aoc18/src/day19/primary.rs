@@ -1,19 +1,21 @@
-// approach: TODO
-// cost: TODO
-// trade: TODO
+// approach: interpret the program with its instruction pointer bound to the declared register.
+// cost: O(executed instructions) time, O(program length) memory, one input pass.
+// trade: direct simulation preserves all control flow without assumptions about the program.
 
-//! Advent of Code 2018, day 19: the primary solution.
+//! Executes the background process to completion with initially zeroed registers.
 
+use super::parse;
+use crate::device::{DeviceError, Machine};
 use aoc_core::Answers;
 
-use super::{ParseError, parse};
-
-/// Solves both parts; an unfinished part renders as `0`.
+/// Returns register zero at termination; part two is not yet implemented.
 ///
 /// # Errors
-///
-/// Returns [`ParseError`] when the input does not match the puzzle's grammar.
-pub fn solve(input: &str) -> Result<Answers, ParseError> {
-    let _puzzle = parse(input)?;
-    Ok(Answers::new(0, 0))
+/// Returns an error for malformed programs or arithmetic overflow.
+pub fn solve(input: &str) -> Result<Answers, DeviceError> {
+    let program = parse(input)?;
+    let mut machine = Machine::default();
+    while program.step(&mut machine)? {}
+    let [answer, ..] = machine.registers;
+    Ok(Answers::new(answer, 0))
 }
