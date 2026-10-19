@@ -1,32 +1,37 @@
-//! Advent of Code 2018, day 11: the puzzle's domain model and parser.
+//! Fuel-grid serial number parsing for Advent of Code 2018, day 11.
 
 pub mod primary;
 
-/// The puzzle input, one entry per line in input order.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Puzzle<'a> {
-    lines: Vec<&'a str>,
+/// A nonnegative grid serial number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Puzzle {
+    serial: u32,
 }
 
-impl Puzzle<'_> {
-    /// Returns the input lines in their original order.
-    #[must_use]
-    pub fn lines(&self) -> &[&str] {
-        &self.lines
-    }
+/// Failure to parse a grid serial number.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum ParseError {
+    /// The input contains no serial number.
+    #[error("missing grid serial number")]
+    Empty,
+    /// The input is not one nonnegative integer.
+    #[error("invalid grid serial number")]
+    Serial(#[from] std::num::ParseIntError),
 }
 
-/// Failure to parse a nonempty sequence of input lines.
-pub type ParseError = aoc_core::RecordsError<std::convert::Infallible>;
-
-/// Parses the puzzle input into its domain model.
+/// Parses a single nonnegative grid serial number.
 ///
 /// # Errors
-///
-/// Returns [`ParseError::Empty`] when the input holds no lines.
-pub fn parse(input: &str) -> Result<Puzzle<'_>, ParseError> {
-    let lines = aoc_core::parse_records(input, Ok)?;
-    Ok(Puzzle { lines })
+/// Returns [`ParseError`] for empty input or an invalid integer.
+pub fn parse(input: &str) -> Result<Puzzle, ParseError> {
+    let input = input.trim();
+    if input.is_empty() {
+        return Err(ParseError::Empty);
+    }
+    Ok(Puzzle {
+        serial: input.parse()?,
+    })
 }
 
 #[cfg(test)]
@@ -35,28 +40,35 @@ mod tests {
 
     #[test]
     fn empty_input_is_rejected() {
-        assert_eq!(parse(""), Err(ParseError::Empty), "no lines");
+        assert!(matches!(parse(""), Err(ParseError::Empty)), "no serial");
     }
 
     #[test]
     fn lines_keep_their_order() {
-        let puzzle = parse("b\na\n").unwrap();
-        assert_eq!(puzzle.lines(), ["b", "a"], "input order");
+        assert!(
+            matches!(parse("2\n1\n"), Err(ParseError::Serial(_))),
+            "one serial only"
+        );
     }
 
     #[test]
     fn lines_borrow_the_input_and_strip_crlf() {
-        let input = String::from("b\r\n\r\na\r\n");
-        let puzzle = parse(&input).unwrap();
+        assert_eq!(parse("17\r\n").unwrap().serial, 17, "CRLF serial");
+    }
+
+    #[test]
+    fn serial_boundaries_and_invalid_values() {
+        assert_eq!(parse("0").unwrap().serial, 0, "zero serial");
         assert_eq!(
-            puzzle.lines(),
-            ["b", "", "a"],
-            "line terminators and empty records"
+            parse("4294967295").unwrap().serial,
+            u32::MAX,
+            "largest serial"
         );
-        assert_eq!(
-            puzzle.lines()[0].as_ptr(),
-            input.as_ptr(),
-            "borrowed storage"
-        );
+        for input in ["-1", "4294967296", "serial", "1 2"] {
+            assert!(
+                matches!(parse(input), Err(ParseError::Serial(_))),
+                "reject {input}"
+            );
+        }
     }
 }
