@@ -255,7 +255,7 @@ silicon macOS.
 
 ```text
 Cargo.toml                     Workspace (members = crates/*), dependencies, lints, profiles
-crates/aoc-core/               Calendar (Year, Day), Answers, stdin runner (aoc_core::run)
+crates/aoc-core/               Calendar (Year, Day), Answers, line records (parse_records, RecordsError), stdin runner (aoc_core::run)
 crates/aoc-ops/                Workflow binary; pure modules plus app.rs as the effectful edge
 crates/aocYY/                  One crate per year, created by `new`
   src/lib.rs                   `pub mod dayDD;` per started day, sorted
