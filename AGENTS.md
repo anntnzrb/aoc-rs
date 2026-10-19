@@ -221,14 +221,12 @@ opportunities without expanding worker ownership.
 
 ## Status
 
-The workspace is scaffolded on x86_64 Linux; macOS is not yet verified. No
-puzzle is solved and no year crate exists: the first `new` creates it. Done:
-the Nix devshell, the Rust gate assets, `aoc-core` (calendar, answers, stdin
-runner) and `aoc-ops` with `fetch`, `puzzle`, `submit`, `new`, `run`, `test`,
-`bench`, `record` and `doc`. `fetch` and `puzzle` were exercised against the
-live site with an invalid cookie (HTTP 500, nothing cached); `submit` is
-verified offline only, so the first live submission happens on the first
-authorized solve. No publishing remote is configured, so CI and push are unrun.
+The workspace runs on x86_64 Linux; macOS is not yet verified. Solved: 2018
+day 1 (crate `aoc18`). Done: the Nix devshell, the Rust gate assets,
+`aoc-core` (calendar, answers, stdin runner) and `aoc-ops` with `fetch`,
+`puzzle`, `submit`, `new`, `run`, `test`, `bench`, `record` and `doc`, all
+exercised live, including real submissions. No publishing remote is
+configured, so CI and push are unrun.
 Never read another language's AoC repository while solving: it contains
 solutions.
 
@@ -314,7 +312,9 @@ docs/journal/YEAR.md           Learning log, created by hand on a year's first s
 - Every solution file opens with `// approach:`, `// cost:` (time, memory,
   full input passes) and `// trade:` lines, each with text, before its `//!`
   doc. Templates start them as `TODO`; `doc` accepts them, so replace them
-  before the part's commit. Comment only decision points inside the code.
+  before the part's commit. Each tag appears exactly once, on the first three
+  lines; `doc` rejects repeated tag lines. Comment only decision points inside
+  the code.
 - Typed errors per operation with `thiserror`, causes kept. No panics,
   indexing, `as` casts or unchecked arithmetic outside tests. `#![forbid(unsafe_code)]`
   in every crate root and binary.
@@ -322,7 +322,10 @@ docs/journal/YEAR.md           Learning log, created by hand on a year's first s
   rejection, boundaries and behavior. Statement-derived examples belong in
   ignored fixtures, not tracked tests.
 - An unfinished part renders `0` (`Answers::new(part1, 0)`); a puzzle without a
-  computational part 2 uses `Answers::part1_only`.
+  computational part 2 uses `Answers::part1_only`. When a statement's part-1
+  example has no part-2 answer (the part-2 question is undefined for it), the
+  solution renders part 1 only for that input instead of inventing a value or
+  failing, so every part-1 fixture stays valid.
 
 ## Commands
 
