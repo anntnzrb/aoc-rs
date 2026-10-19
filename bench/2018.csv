@@ -1,0 +1,2 @@
+date,commit,host,os,cpu,compiler,std,year,day,solution,runs,work_med,work_min,work_max,instr_med,wall_min_us,wall_med_us,cpu_med_us,rss_kib
+"2026-10-19T05:21:24Z","242ca7069b7e9db52ebb4db0580f398dc0320d54","oulu","Linux 7.2.8 x86_64","13th Gen Intel(R) Core(TM) i7-1355U","rustc 1.99.1 (58cf8f9c3 2026-10-13)","Rust 2024",2018,1,"primary",10,93482506,92797595,107539872,94146663,4864,5008,0,2208
