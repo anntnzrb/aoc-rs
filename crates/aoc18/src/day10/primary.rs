@@ -126,14 +126,14 @@ fn render(lights: &[Light], seconds: i64) -> Result<String, SolveError> {
     Ok(raster)
 }
 
-/// Renders the tightest sky with `/` row separators; unfinished part two is `0`.
+/// Renders the tightest sky with `/` row separators and reports its elapsed seconds.
 ///
 /// # Errors
 /// Returns [`SolveError`] for malformed observations, overflow or excessive raster size.
 pub fn solve(input: &str) -> Result<Answers, SolveError> {
     let puzzle = parse(input)?;
     let seconds = message_time(&puzzle.lights)?;
-    Ok(Answers::new(render(&puzzle.lights, seconds)?, 0))
+    Ok(Answers::new(render(&puzzle.lights, seconds)?, seconds))
 }
 
 #[cfg(test)]
