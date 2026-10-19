@@ -296,6 +296,10 @@ docs/journal/YEAR.md           Learning log, created by hand on a year's first s
   `cargo-mutants`, and `just gate` replaces the Rust skill's `cli.py gate`,
   which always runs mutations. This overrides the Rust skill's mutation and
   `cli.py gate` rules; do not reintroduce them.
+- Property testing is out of scope by user decision, for the same reason:
+  day parsers are covered by unit tests, statement fixtures and real-input
+  answers. This overrides the Rust skill's `proptest` rule; do not add the
+  crate or stop a solve for it.
 - Gate files (`.gate/`, `.github/`, `deny.toml`, `clippy.toml`,
   `rustfmt.toml`, `rust-toolchain.toml`, lint and profile tables) are
   human-owned. Never edit them without a specific user request.
