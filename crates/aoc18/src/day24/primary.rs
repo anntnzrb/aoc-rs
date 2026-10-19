@@ -1,6 +1,6 @@
 // approach: Select targets by damage and power, then apply attacks in initiative order.
-// cost: O(R G² + R G log G) time and O(G) memory; one input pass.
-// trade: Stable group slots separate immutable traits from casualties; zero-kill rounds terminate.
+// cost: O(B R G² + B R G log G) time and O(G) memory; one input pass.
+// trade: Exhaustive ascending boosts prove minimality without assuming monotone battle outcomes.
 
 //! Direct simulation of the two armies' target selection and attacks.
 
@@ -157,7 +157,7 @@ fn fight(puzzle: &Puzzle<'_>, boost: u64) -> Result<Outcome, SolveError> {
     }
 }
 
-/// Solves the unboosted battle; part two is not yet implemented.
+/// Solves unboosted combat and searches ascending boosts for the first immune victory.
 ///
 /// # Errors
 /// Returns an error for invalid input, overflow, or an unboosted stalemate.
@@ -166,7 +166,13 @@ pub fn solve(input: &str) -> Result<Answers, SolveError> {
     let Outcome::Victory(_, units) = fight(&puzzle, 0)? else {
         return Err(SolveError::Stalemate);
     };
-    Ok(Answers::new(units, 0))
+    let mut boost = 0_u64;
+    loop {
+        if let Outcome::Victory(Army::Immune, survivors) = fight(&puzzle, boost)? {
+            return Ok(Answers::new(units, survivors));
+        }
+        boost = boost.checked_add(1).ok_or(SolveError::Overflow)?;
+    }
 }
 
 #[cfg(test)]
@@ -190,6 +196,21 @@ mod tests {
             fight(&puzzle, 0).unwrap(),
             Outcome::Stalemate,
             "partial damage does not accumulate"
+        );
+    }
+
+    #[test]
+    fn boost_crosses_stalemates_and_uses_the_smallest_winner() {
+        let puzzle = parse("Immune System:\n1 units each with 10 hit points with an attack that does 1 fire damage at initiative 2\nInfection:\n1 units each with 10 hit points with an attack that does 1 cold damage at initiative 1\n").unwrap();
+        assert_eq!(
+            fight(&puzzle, 8).unwrap(),
+            Outcome::Stalemate,
+            "boost eight cannot kill a unit"
+        );
+        assert_eq!(
+            fight(&puzzle, 9).unwrap(),
+            Outcome::Victory(Army::Immune, 1),
+            "boost nine is the first lethal attack"
         );
     }
 }
