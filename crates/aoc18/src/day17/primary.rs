@@ -142,6 +142,15 @@ impl Ground {
             })
             .count()
     }
+
+    fn retained(&self) -> usize {
+        self.cells
+            .iter()
+            .filter(|((_, y), cell)| {
+                (self.min_y..=self.max_y).contains(y) && **cell == Cell::Settled
+            })
+            .count()
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -150,7 +159,7 @@ enum Edge {
     Spill(i64),
 }
 
-/// Counts reachable water; the unfinished second part renders as zero.
+/// Counts all reachable water and the subset retained after the spring stops.
 ///
 /// # Errors
 /// Returns [`SolveError`] for invalid scans or coordinate overflow.
@@ -158,7 +167,7 @@ pub fn solve(input: &str) -> Result<Answers, SolveError> {
     let puzzle = parse(input)?;
     let mut ground = Ground::new(&puzzle)?;
     ground.fill()?;
-    Ok(Answers::new(ground.reachable(), 0))
+    Ok(Answers::new(ground.reachable(), ground.retained()))
 }
 
 #[cfg(test)]
@@ -202,6 +211,7 @@ mod tests {
             Some(&Cell::Flowing),
             "right overflow"
         );
+        assert_eq!(ground.retained(), 2, "only the enclosed column remains");
     }
 
     #[test]
