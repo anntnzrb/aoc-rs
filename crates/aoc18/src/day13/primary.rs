@@ -1,6 +1,6 @@
-// approach: simulate carts in reading order, updating occupancy after each move
-// cost: O(S + T C log(S C)) time, O(S + T C) memory, one input pass
-// trade: sparse ordered maps preserve movement order; repeated states reject noncolliding maps
+// approach: move carts in reading order, removing each colliding pair immediately
+// cost: O(S log S + T C log(S C T)) time, O(S + T C) memory, one input pass
+// trade: separate pending and moved maps prevent removed carts taking turns; detect cycles
 
 //! Reading-order cart simulation with immediate collision detection.
 
@@ -28,8 +28,8 @@ pub enum SolveError {
     /// A coordinate exceeded its representation.
     #[error("cart coordinate overflow")]
     Coordinate,
-    /// No collision can occur from the repeated state.
-    #[error("cart state repeated without a collision")]
+    /// The repeated state cannot reach the requested collision or survivor.
+    #[error("cart state repeated without reaching a terminal outcome")]
     NoCollision,
 }
 
@@ -80,7 +80,8 @@ fn advance(position: Position, cart: &mut Cart, puzzle: &Puzzle) -> Result<Posit
     Ok(destination)
 }
 
-fn first_collision(mut puzzle: Puzzle) -> Result<Position, SolveError> {
+fn simulate(mut puzzle: Puzzle) -> Result<(Position, Option<Position>), SolveError> {
+    let mut first = None;
     let mut seen = BTreeSet::new();
     loop {
         if !seen.insert(
@@ -92,32 +93,51 @@ fn first_collision(mut puzzle: Puzzle) -> Result<Position, SolveError> {
         ) {
             return Err(SolveError::NoCollision);
         }
-        let order: Vec<_> = puzzle.carts.keys().copied().collect();
-        for position in order {
-            if let Some(mut cart) = puzzle.carts.remove(&position) {
-                let destination = advance(position, &mut cart, &puzzle)?;
-                if puzzle.carts.contains_key(&destination) {
-                    return Ok(destination);
-                }
+        let mut pending = std::mem::take(&mut puzzle.carts);
+        while let Some((position, mut cart)) = pending.pop_first() {
+            let destination = advance(position, &mut cart, &puzzle)?;
+            if pending.remove(&destination).is_some() || puzzle.carts.remove(&destination).is_some()
+            {
+                first.get_or_insert(destination);
+            } else {
                 puzzle.carts.insert(destination, cart);
             }
+        }
+        if puzzle.carts.len() <= 1 {
+            return Ok((
+                first.ok_or(SolveError::NoCollision)?,
+                puzzle
+                    .carts
+                    .first_key_value()
+                    .map(|(&position, _)| position),
+            ));
         }
     }
 }
 
-/// Finds the first crash; the unfinished second part renders as zero.
+/// Finds the first crash and the last cart after a completed tick.
+///
+/// Inputs where every cart crashes render only part one.
 ///
 /// # Errors
-/// Returns [`SolveError`] for invalid maps, derailed carts, or noncolliding cycles.
+/// Returns [`SolveError`] for invalid maps, derailed carts, or nonterminating cycles.
 pub fn solve(input: &str) -> Result<Answers, SolveError> {
-    let (y, x) = first_collision(parse(input)?)?;
-    Ok(Answers::new(format!("{x},{y}"), 0))
+    let ((y, x), survivor) = simulate(parse(input)?)?;
+    let first = format!("{x},{y}");
+    Ok(survivor.map_or_else(
+        || Answers::part1_only(&first),
+        |(last_y, last_x)| Answers::new(&first, format!("{last_x},{last_y}")),
+    ))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{SolveError, first_collision};
+    use super::SolveError;
     use crate::day13::parse;
+
+    fn first_collision(puzzle: crate::day13::Puzzle) -> Result<crate::day13::Position, SolveError> {
+        super::simulate(puzzle).map(|(first, _)| first)
+    }
 
     #[test]
     fn detects_collision_with_unmoved_cart() {
@@ -156,6 +176,26 @@ mod tests {
                 Err(SolveError::NoCollision)
             ),
             "finite state repetition terminates"
+        );
+    }
+
+    #[test]
+    fn last_cart_finishes_its_tick_after_a_collision() {
+        let result = super::simulate(parse(">-< >-").unwrap()).unwrap();
+        assert_eq!(
+            result,
+            ((0, 1), Some((0, 5))),
+            "survivor moves even when collision occurs earlier in the tick"
+        );
+    }
+
+    #[test]
+    fn removed_cart_does_not_move_a_later_arrival_twice() {
+        let result = super::simulate(parse(" v \n>+<\n ^ ").unwrap()).unwrap();
+        assert_eq!(
+            result,
+            ((1, 1), None),
+            "third cart may enter cleared crash cell before fourth crashes into it"
         );
     }
 }
