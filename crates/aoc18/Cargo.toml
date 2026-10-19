@@ -1,0 +1,13 @@
+[package]
+name = "aoc18"
+description = "Advent of Code 2018 solutions"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+aoc-core.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
