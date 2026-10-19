@@ -1,0 +1,12 @@
+[package]
+name = "aoc-core"
+description = "Shared puzzle dates, answers and the stdin runner for Advent of Code solutions"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[lints]
+workspace = true

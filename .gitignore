@@ -1,0 +1,23 @@
+# Build output
+/target/
+/inputs/
+/puzzles/
+/fixtures/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Scratch data, regression answers, and interrupted writes
+/.cache/
+*.tmp
+
+# Local environment and editor state
+.direnv/
+/result
+.DS_Store
+/.claude/settings.local.json
+
+# Unpublished notes
+/docs/roadmap.md

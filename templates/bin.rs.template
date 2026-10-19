@@ -1,0 +1,7 @@
+//! Advent of Code {{YEAR}}, day {{DAYN}}: reads the input on stdin and prints the {{LABEL}} answers.
+
+#![forbid(unsafe_code)]
+
+fn main() -> std::process::ExitCode {
+    aoc_core::run({{CRATE}}::day{{DAY}}::{{MODULE}}::solve)
+}
