@@ -58,13 +58,20 @@ fn high_score(players: NonZeroUsize, last: u64) -> Result<u64, SolveError> {
     Ok(scores.into_iter().max().unwrap_or(0))
 }
 
-/// Finds the highest score; unfinished part two renders `0`.
+/// Finds the highest scores for the specified and hundredfold larger games.
 ///
 /// # Errors
 /// Returns [`SolveError`] for invalid descriptions, storage exhaustion or overflow.
 pub fn solve(input: &str) -> Result<Answers, SolveError> {
     let game = parse(input)?;
-    Ok(Answers::new(high_score(game.players, game.last_marble)?, 0))
+    let extended = game
+        .last_marble
+        .checked_mul(100)
+        .ok_or(SolveError::Overflow)?;
+    Ok(Answers::new(
+        high_score(game.players, game.last_marble)?,
+        high_score(game.players, extended)?,
+    ))
 }
 
 #[cfg(test)]
