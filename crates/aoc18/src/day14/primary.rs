@@ -1,6 +1,6 @@
-// approach: Append sum digits to a scoreboard and move the two recipe cursors cyclically.
-// cost: O(n) time and memory for n requested recipes; one input pass.
-// trade: A byte per score keeps random cursor access simple while retaining the whole board.
+// approach: Simulate the scoreboard and compare each new candidate start with the input digits.
+// cost: O(L*m) time, O(L+m) memory for L generated recipes and m input digits; one input pass.
+// trade: Direct comparisons avoid matcher preprocessing; cursor movement requires retaining scores.
 
 //! Chocolate scoreboard simulation.
 
@@ -72,7 +72,7 @@ impl Scoreboard {
     }
 }
 
-/// Returns ten scores after the requested recipe count; part two is unfinished.
+/// Returns ten subsequent scores and the first position of the input's digit sequence.
 ///
 /// # Errors
 /// Returns an error for invalid input, arithmetic overflow, or an invalid cursor.
@@ -80,10 +80,34 @@ pub fn solve(input: &str) -> Result<Answers, SolveError> {
     let puzzle = parse(input)?;
     let end = puzzle.count.checked_add(10).ok_or(SolveError::Overflow)?;
     let mut board = Scoreboard::new();
-    while board.scores.len() < end {
+    let pattern: Vec<u8> = puzzle
+        .text
+        .bytes()
+        .map(|byte| byte.checked_sub(b'0').ok_or(SolveError::Cursor))
+        .collect::<Result<_, _>>()?;
+    let mut next_start = 0_usize;
+    let mut found = None;
+    loop {
+        while found.is_none() {
+            let candidate_end = next_start
+                .checked_add(pattern.len())
+                .ok_or(SolveError::Overflow)?;
+            let Some(candidate) = board.scores.get(next_start..candidate_end) else {
+                break;
+            };
+            if candidate == pattern {
+                found = Some(next_start);
+            } else {
+                next_start = next_start.checked_add(1).ok_or(SolveError::Overflow)?;
+            }
+        }
+        if let Some(position) = found
+            && board.scores.len() >= end
+        {
+            return Ok(Answers::new(board.following(puzzle.count, end)?, position));
+        }
         board.step()?;
     }
-    Ok(Answers::new(board.following(puzzle.count, end)?, 0))
 }
 
 #[cfg(test)]
@@ -100,5 +124,24 @@ mod tests {
             matches!(solve(&usize::MAX.to_string()), Err(SolveError::Overflow)),
             "end overflow"
         );
+    }
+
+    #[test]
+    fn initial_and_two_digit_append_matches() {
+        for (input, position) in [
+            ("3", "0"),
+            ("7", "1"),
+            ("37", "0"),
+            ("1", "2"),
+            ("0", "3"),
+            ("10", "2"),
+            ("01", "3"),
+        ] {
+            assert_eq!(
+                solve(input).unwrap().part2(),
+                Some(position),
+                "pattern {input}"
+            );
+        }
     }
 }
