@@ -20,7 +20,7 @@ pub enum SolveError {
     Overflow,
 }
 
-/// Sums license metadata; unfinished part two renders `0`.
+/// Sums license metadata and evaluates child references in postorder.
 ///
 /// # Errors
 /// Returns [`SolveError`] for invalid trees or an overflowing sum.
@@ -33,7 +33,31 @@ pub fn solve(input: &str) -> Result<Answers, SolveError> {
         .try_fold(0_u64, |sum, &entry| {
             sum.checked_add(entry).ok_or(SolveError::Overflow)
         })?;
-    Ok(Answers::new(sum, 0))
+    let mut values = Vec::with_capacity(puzzle.nodes.len());
+    for node in &puzzle.nodes {
+        let mut value = 0_u64;
+        for &entry in &node.metadata {
+            let contribution = if node.children.is_empty() {
+                entry
+            } else if let Some(index) = entry.checked_sub(1) {
+                // An index wider than usize cannot name an existing child.
+                usize::try_from(index).map_or(0, |index| {
+                    node.children
+                        .get(index)
+                        .and_then(|&child| values.get(child))
+                        .copied()
+                        .unwrap_or(0)
+                })
+            } else {
+                0
+            };
+            value = value
+                .checked_add(contribution)
+                .ok_or(SolveError::Overflow)?;
+        }
+        values.push(value);
+    }
+    Ok(Answers::new(sum, values.last().copied().unwrap_or(0)))
 }
 
 #[cfg(test)]
@@ -53,6 +77,20 @@ mod tests {
                 Err(SolveError::Overflow)
             ),
             "sum checked"
+        );
+    }
+
+    #[test]
+    fn repeated_child_references_and_invalid_indices() {
+        assert_eq!(
+            solve("1 4 0 1 7 1 1 0 2").unwrap(),
+            aoc_core::Answers::new(11, 14),
+            "repeat counts; zero and absent children do not"
+        );
+        assert_eq!(
+            solve("0 2 3 4").unwrap(),
+            aoc_core::Answers::new(7, 7),
+            "leaf value is metadata sum"
         );
     }
 }
