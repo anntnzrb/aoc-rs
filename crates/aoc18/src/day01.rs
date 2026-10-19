@@ -17,13 +17,13 @@ impl Puzzle {
     }
 }
 
-/// Input that does not match the frequency-change grammar.
+/// Failure to parse the input's nonempty sequence of frequency changes.
+pub type ParseError = aoc_core::RecordsError<ChangeError>;
+
+/// A line that does not match the frequency-change grammar.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
-pub enum ParseError {
-    /// The input holds no changes.
-    #[error("input is empty")]
-    Empty,
+pub enum ChangeError {
     /// A line lacks a sign followed by decimal digits.
     #[error("expected a sign followed by decimal digits")]
     InvalidChange,
@@ -38,28 +38,22 @@ pub enum ParseError {
 ///
 /// Returns [`ParseError`] for empty input, malformed lines or out-of-range changes.
 pub fn parse(input: &str) -> Result<Puzzle, ParseError> {
-    let changes = input
-        .lines()
-        .map(|line| {
-            let mut bytes = line.bytes();
-            if !matches!(bytes.next(), Some(b'+' | b'-'))
-                || bytes.len() == 0
-                || !bytes.all(|byte| byte.is_ascii_digit())
-            {
-                return Err(ParseError::InvalidChange);
-            }
-            line.parse().map_err(ParseError::Integer)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    if changes.is_empty() {
-        return Err(ParseError::Empty);
-    }
+    let changes = aoc_core::parse_records(input, |line| {
+        let mut bytes = line.bytes();
+        if !matches!(bytes.next(), Some(b'+' | b'-'))
+            || bytes.len() == 0
+            || !bytes.all(|byte| byte.is_ascii_digit())
+        {
+            return Err(ChangeError::InvalidChange);
+        }
+        line.parse().map_err(ChangeError::Integer)
+    })?;
     Ok(Puzzle { changes })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ParseError, parse};
+    use super::{ChangeError, ParseError, parse};
 
     #[test]
     fn empty_input_is_rejected() {
@@ -75,14 +69,35 @@ mod tests {
     #[test]
     fn malformed_changes_are_rejected() {
         for input in ["7", "+", "-", "+ 3", " +3", "+3 ", "+3\n\n-2", "++2", "+²"] {
-            assert_eq!(parse(input), Err(ParseError::InvalidChange), "{input:?}");
+            assert!(
+                matches!(
+                    parse(input),
+                    Err(ParseError::Line {
+                        source: ChangeError::InvalidChange,
+                        ..
+                    })
+                ),
+                "{input:?}"
+            );
         }
         assert!(
-            matches!(parse("+9223372036854775808"), Err(ParseError::Integer(_))),
+            matches!(
+                parse("+9223372036854775808"),
+                Err(ParseError::Line {
+                    source: ChangeError::Integer(_),
+                    ..
+                })
+            ),
             "positive overflow"
         );
         assert!(
-            matches!(parse("-9223372036854775809"), Err(ParseError::Integer(_))),
+            matches!(
+                parse("-9223372036854775809"),
+                Err(ParseError::Line {
+                    source: ChangeError::Integer(_),
+                    ..
+                })
+            ),
             "negative overflow"
         );
     }
