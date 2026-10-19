@@ -88,19 +88,38 @@ fn distances(doors: &Doors) -> Result<Vec<usize>, ParseError> {
     Ok(distances)
 }
 
-/// Solves the furthest-room distance; unfinished part two renders as zero.
+/// Solves the furthest-room distance and counts rooms at least 1000 doors away.
 ///
 /// # Errors
 /// Returns [`ParseError`] for malformed expressions or unrepresentable maps.
 pub fn solve(input: &str) -> Result<Answers, ParseError> {
     let puzzle = parse(input)?;
     let distances = distances(&map(&puzzle)?)?;
-    Ok(Answers::new(distances.into_iter().max().unwrap_or(0), 0))
+    let distant = distances
+        .iter()
+        .filter(|&&distance| distance >= 1000)
+        .count();
+    Ok(Answers::new(
+        distances.into_iter().max().unwrap_or(0),
+        distant,
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{ParseError, solve, step};
+
+    #[test]
+    fn distant_rooms_include_the_threshold() {
+        for (length, count) in [(999, 0), (1000, 1), (1001, 2)] {
+            let input = format!("^{}$", "N".repeat(length));
+            assert_eq!(
+                solve(&input).unwrap(),
+                aoc_core::Answers::new(length, count),
+                "straight corridor of {length} doors"
+            );
+        }
+    }
 
     #[test]
     fn branches_continue_from_all_endpoints() {
