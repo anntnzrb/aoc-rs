@@ -1,37 +1,70 @@
-//! Advent of Code 2018, day 18: the puzzle's domain model and parser.
+//! Validated rectangular lumber collection areas and their three possible acre states.
 
 pub mod primary;
 
-/// The puzzle input, one entry per line in input order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Acre {
+    Open,
+    Trees,
+    Lumberyard,
+}
+
+/// A nonempty rectangular area of acres.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Puzzle<'a> {
-    lines: Vec<&'a str>,
+pub struct Puzzle {
+    acres: Vec<Vec<Acre>>,
 }
 
-impl Puzzle<'_> {
-    /// Returns the input lines in their original order.
-    #[must_use]
-    pub fn lines(&self) -> &[&str] {
-        &self.lines
-    }
+/// Invalid area geometry or acre symbols.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum ParseError {
+    /// No acres were supplied.
+    #[error("area is empty")]
+    Empty,
+    /// Rows have different widths.
+    #[error("area rows have different widths")]
+    Ragged,
+    /// Only the three acre symbols are accepted.
+    #[error("invalid acre symbol {0:?}")]
+    Symbol(char),
 }
 
-/// Failure to parse a nonempty sequence of input lines.
-pub type ParseError = aoc_core::RecordsError<std::convert::Infallible>;
-
-/// Parses the puzzle input into its domain model.
+/// Parses a nonempty rectangular area, accepting LF and CRLF line endings.
 ///
 /// # Errors
-///
-/// Returns [`ParseError::Empty`] when the input holds no lines.
-pub fn parse(input: &str) -> Result<Puzzle<'_>, ParseError> {
-    let lines = aoc_core::parse_records(input, Ok)?;
-    Ok(Puzzle { lines })
+/// Returns [`ParseError`] for an empty area, uneven rows, or unknown symbols.
+pub fn parse(input: &str) -> Result<Puzzle, ParseError> {
+    let mut acres = Vec::new();
+    let mut width = None;
+    for line in input.lines() {
+        if line.is_empty() {
+            return Err(ParseError::Empty);
+        }
+        if width.is_some_and(|expected| expected != line.len()) {
+            return Err(ParseError::Ragged);
+        }
+        width = Some(line.len());
+        let row = line
+            .chars()
+            .map(|symbol| match symbol {
+                '.' => Ok(Acre::Open),
+                '|' => Ok(Acre::Trees),
+                '#' => Ok(Acre::Lumberyard),
+                other => Err(ParseError::Symbol(other)),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        acres.push(row);
+    }
+    if acres.is_empty() {
+        return Err(ParseError::Empty);
+    }
+    Ok(Puzzle { acres })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ParseError, parse};
+    use super::{Acre, ParseError, parse};
 
     #[test]
     fn empty_input_is_rejected() {
@@ -40,23 +73,23 @@ mod tests {
 
     #[test]
     fn lines_keep_their_order() {
-        let puzzle = parse("b\na\n").unwrap();
-        assert_eq!(puzzle.lines(), ["b", "a"], "input order");
+        let puzzle = parse(".|\n#.\n").unwrap();
+        assert_eq!(
+            puzzle.acres,
+            [[Acre::Open, Acre::Trees], [Acre::Lumberyard, Acre::Open]],
+            "row and column order"
+        );
     }
 
     #[test]
     fn lines_borrow_the_input_and_strip_crlf() {
-        let input = String::from("b\r\n\r\na\r\n");
-        let puzzle = parse(&input).unwrap();
-        assert_eq!(
-            puzzle.lines(),
-            ["b", "", "a"],
-            "line terminators and empty records"
-        );
-        assert_eq!(
-            puzzle.lines()[0].as_ptr(),
-            input.as_ptr(),
-            "borrowed storage"
-        );
+        assert_eq!(parse(".|\r\n#.\r\n"), parse(".|\n#.\n"), "CRLF");
+        assert_eq!(parse(".\n\n.\n"), Err(ParseError::Empty), "empty row");
+    }
+
+    #[test]
+    fn rejects_invalid_geometry_and_symbols() {
+        assert_eq!(parse("..\n.\n"), Err(ParseError::Ragged), "ragged");
+        assert_eq!(parse("x"), Err(ParseError::Symbol('x')), "symbol");
     }
 }
