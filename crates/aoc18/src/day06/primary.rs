@@ -18,6 +18,9 @@ pub enum SolveError {
     /// A region count cannot be represented.
     #[error("region size overflow")]
     Overflow,
+    /// A coordinate margin or site count cannot be represented.
+    #[error("region dimensions exceed integer range")]
+    Dimension(#[from] std::num::TryFromIntError),
 }
 
 fn bounds(points: &[Point]) -> Result<(i64, i64, i64, i64), SolveError> {
@@ -85,18 +88,50 @@ fn largest_finite(points: &[Point]) -> Result<u64, SolveError> {
         .unwrap_or(0))
 }
 
-/// Finds the largest finite area; unfinished part two renders `0`.
+fn safe_region(points: &[Point], limit: u64) -> Result<u64, SolveError> {
+    let (left, right, top, bottom) = bounds(points)?;
+    let count = u64::try_from(points.len())?;
+    let margin = i64::try_from(limit.checked_div(count).ok_or(SolveError::Overflow)?)?;
+    // Beyond this margin every site contributes more than limit / site_count.
+    let left = left.checked_sub(margin).ok_or(SolveError::Overflow)?;
+    let right = right.checked_add(margin).ok_or(SolveError::Overflow)?;
+    let top = top.checked_sub(margin).ok_or(SolveError::Overflow)?;
+    let bottom = bottom.checked_add(margin).ok_or(SolveError::Overflow)?;
+    let mut area = 0_u64;
+    for y in top..=bottom {
+        for x in left..=right {
+            let mut total = 0_u64;
+            for &point in points {
+                total = total
+                    .checked_add(distance(point, x, y)?)
+                    .ok_or(SolveError::Overflow)?;
+                if total >= limit {
+                    break;
+                }
+            }
+            if total < limit {
+                area = area.checked_add(1).ok_or(SolveError::Overflow)?;
+            }
+        }
+    }
+    Ok(area)
+}
+
+/// Finds the largest finite area and the region with total distance below 10000.
 ///
 /// # Errors
 /// Returns [`SolveError`] for invalid sites or an overflowing count.
 pub fn solve(input: &str) -> Result<Answers, SolveError> {
     let puzzle = parse(input)?;
-    Ok(Answers::new(largest_finite(&puzzle.points)?, 0))
+    Ok(Answers::new(
+        largest_finite(&puzzle.points)?,
+        safe_region(&puzzle.points, 10000)?,
+    ))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{largest_finite, owner};
+    use super::{largest_finite, owner, safe_region};
     use crate::day06::Point;
 
     #[test]
@@ -116,5 +151,13 @@ mod tests {
             1,
             "isolated center owns itself"
         );
+    }
+
+    #[test]
+    fn region_extends_outside_site_bounds() {
+        let sites = [Point { x: -3, y: 4 }];
+        assert_eq!(safe_region(&sites, 3).unwrap(), 13, "radius two diamond");
+        assert_eq!(safe_region(&sites, 1).unwrap(), 1, "strict limit");
+        assert_eq!(safe_region(&sites, 0).unwrap(), 0, "empty region");
     }
 }
