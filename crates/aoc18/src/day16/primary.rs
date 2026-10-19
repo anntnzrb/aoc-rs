@@ -6,7 +6,8 @@
 
 use aoc_core::Answers;
 
-use super::{OPS, Op, ParseError, Puzzle, Sample, parse};
+use super::{ParseError, Puzzle, Sample, parse};
+use crate::device::{DeviceError as Error, OPS, Op};
 
 fn compatible(sample: &Sample, op: Op) -> bool {
     let [_, a, b, c] = sample.instruction;
@@ -14,13 +15,11 @@ fn compatible(sample: &Sample, op: Op) -> bool {
     match op.execute(&mut registers, [a, b, c]) {
         Ok(()) => registers == sample.after,
         Err(
-            ParseError::Register(_)
-            | ParseError::Index(_)
-            | ParseError::Overflow
-            | ParseError::Empty
-            | ParseError::Syntax(_)
-            | ParseError::Number(_)
-            | ParseError::Mapping,
+            Error::Register(_)
+            | Error::Index(_)
+            | Error::Overflow
+            | Error::Syntax(_)
+            | Error::Number(_),
         ) => false,
     }
 }
@@ -132,13 +131,13 @@ mod tests {
 
     #[test]
     fn bijection_search_detects_unique_ambiguous_and_impossible() {
-        let candidates: Vec<_> = crate::day16::OPS.iter().map(|&op| vec![op]).collect();
+        let candidates: Vec<_> = crate::device::OPS.iter().map(|&op| vec![op]).collect();
         let mut solutions = Vec::new();
         super::search(&candidates, &mut [None; 16], &mut solutions);
         assert_eq!(solutions.len(), 1, "one permitted bijection");
         let mut ambiguous = candidates.clone();
-        ambiguous[0].push(crate::day16::OPS[1]);
-        ambiguous[1].push(crate::day16::OPS[0]);
+        ambiguous[0].push(crate::device::OPS[1]);
+        ambiguous[1].push(crate::device::OPS[0]);
         solutions.clear();
         super::search(&ambiguous, &mut [None; 16], &mut solutions);
         assert_eq!(solutions.len(), 2, "two interchangeable meanings");

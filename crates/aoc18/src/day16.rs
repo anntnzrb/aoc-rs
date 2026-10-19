@@ -15,95 +15,15 @@ pub enum ParseError {
     /// A numeric token is invalid.
     #[error("invalid number")]
     Number(#[from] std::num::ParseIntError),
-    /// A register operand is outside the machine.
-    #[error("invalid register {0}")]
-    Register(u64),
+    /// Device execution failed.
+    #[error("device execution failed")]
+    Device(#[from] crate::device::DeviceError),
     /// A register number cannot fit the platform index type.
     #[error("register index is too large")]
     Index(#[from] std::num::TryFromIntError),
-    /// Device arithmetic overflowed.
-    #[error("device arithmetic overflow")]
-    Overflow,
     /// Observations do not determine a unique opcode assignment.
     #[error("opcode assignment is inconsistent or ambiguous")]
     Mapping,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Mode {
-    Register,
-    Immediate,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Op {
-    Add(Mode),
-    Mul(Mode),
-    And(Mode),
-    Or(Mode),
-    Set(Mode),
-    Greater(Mode, Mode),
-    Equal(Mode, Mode),
-}
-
-use Mode::{Immediate as I, Register as R};
-
-pub(crate) const OPS: [Op; 16] = [
-    Op::Add(R),
-    Op::Add(I),
-    Op::Mul(R),
-    Op::Mul(I),
-    Op::And(R),
-    Op::And(I),
-    Op::Or(R),
-    Op::Or(I),
-    Op::Set(R),
-    Op::Set(I),
-    Op::Greater(I, R),
-    Op::Greater(R, I),
-    Op::Greater(R, R),
-    Op::Equal(I, R),
-    Op::Equal(R, I),
-    Op::Equal(R, R),
-];
-
-fn operand(registers: &[u64], value: u64, mode: Mode) -> Result<u64, ParseError> {
-    match mode {
-        I => Ok(value),
-        R => registers
-            .get(usize::try_from(value)?)
-            .copied()
-            .ok_or(ParseError::Register(value)),
-    }
-}
-
-impl Op {
-    pub(crate) fn execute(
-        self,
-        registers: &mut [u64],
-        [a, b, c]: [u64; 3],
-    ) -> Result<(), ParseError> {
-        let value = match self {
-            Self::Add(mode) => operand(registers, a, R)?
-                .checked_add(operand(registers, b, mode)?)
-                .ok_or(ParseError::Overflow)?,
-            Self::Mul(mode) => operand(registers, a, R)?
-                .checked_mul(operand(registers, b, mode)?)
-                .ok_or(ParseError::Overflow)?,
-            Self::And(mode) => operand(registers, a, R)? & operand(registers, b, mode)?,
-            Self::Or(mode) => operand(registers, a, R)? | operand(registers, b, mode)?,
-            Self::Set(mode) => operand(registers, a, mode)?,
-            Self::Greater(am, bm) => {
-                u64::from(operand(registers, a, am)? > operand(registers, b, bm)?)
-            }
-            Self::Equal(am, bm) => {
-                u64::from(operand(registers, a, am)? == operand(registers, b, bm)?)
-            }
-        };
-        let index = usize::try_from(c)?;
-        *registers.get_mut(index).ok_or(ParseError::Register(c))? = value;
-        Ok(())
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -180,7 +100,8 @@ pub fn parse(input: &str) -> Result<Puzzle, ParseError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Mode, Op, ParseError, parse};
+    use super::{ParseError, parse};
+    use crate::device::{Mode, Op};
 
     #[test]
     fn empty_input_is_rejected() {
@@ -231,21 +152,21 @@ mod tests {
         assert!(
             matches!(
                 Op::Add(Mode::Immediate).execute(&mut r, [0, 1, 3]),
-                Err(ParseError::Overflow)
+                Err(crate::device::DeviceError::Overflow)
             ),
             "checked addition"
         );
         assert!(
             matches!(
                 Op::Set(Mode::Register).execute(&mut r, [4, 0, 0]),
-                Err(ParseError::Register(4))
+                Err(crate::device::DeviceError::Register(4))
             ),
             "source bound"
         );
         assert!(
             matches!(
                 Op::Set(Mode::Immediate).execute(&mut r, [7, 99, 4]),
-                Err(ParseError::Register(4))
+                Err(crate::device::DeviceError::Register(4))
             ),
             "destination bound"
         );
