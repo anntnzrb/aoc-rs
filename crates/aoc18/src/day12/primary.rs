@@ -1,10 +1,10 @@
-// approach: evolve the finite set of plant positions using five-pot neighborhoods.
-// cost: O(g w log n) time, O(n) memory, one input pass; g generations, width w, n plants.
-// trade: ordered sparse positions support negative pots and avoid artificial boundaries.
+// approach: evolve five-pot neighborhoods and fast-forward exact translated shape cycles.
+// cost: O(g w log n + g n log g) time, O(g n) memory, one input pass before a cycle.
+// trade: complete shape equality proves skips; no assumed stabilization or fixed horizon.
 
 //! Finite plant propagation with simultaneous generation updates.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use aoc_core::Answers;
 
@@ -41,23 +41,61 @@ fn step(plants: &BTreeSet<i64>, growing: &BTreeSet<u8>) -> Result<BTreeSet<i64>,
     Ok(next)
 }
 
-fn sum_after(puzzle: &Puzzle, generations: u64) -> Result<i64, SolveError> {
+fn sum_after(puzzle: &Puzzle, generations: i64) -> Result<i64, SolveError> {
     let mut plants = puzzle.plants.clone();
-    for _ in 0..generations {
+    let mut seen = BTreeMap::new();
+    let mut generation = 0_i64;
+    while generation < generations {
+        let origin = plants.first().copied().unwrap_or(0);
+        let shape = plants
+            .iter()
+            .map(|position| position.checked_sub(origin).ok_or(SolveError::Overflow))
+            .collect::<Result<Vec<_>, _>>()?;
+        if let Some((previous_generation, previous_origin)) =
+            seen.insert(shape, (generation, origin))
+        {
+            let period = generation
+                .checked_sub(previous_generation)
+                .ok_or(SolveError::Overflow)?;
+            let remaining = generations
+                .checked_sub(generation)
+                .ok_or(SolveError::Overflow)?;
+            let cycles = remaining.checked_div(period).ok_or(SolveError::Overflow)?;
+            let shift = origin
+                .checked_sub(previous_origin)
+                .and_then(|delta| delta.checked_mul(cycles))
+                .ok_or(SolveError::Overflow)?;
+            if cycles > 0 {
+                plants = plants
+                    .into_iter()
+                    .map(|position| position.checked_add(shift).ok_or(SolveError::Overflow))
+                    .collect::<Result<BTreeSet<_>, _>>()?;
+                generation = period
+                    .checked_mul(cycles)
+                    .and_then(|elapsed| generation.checked_add(elapsed))
+                    .ok_or(SolveError::Overflow)?;
+                seen.clear();
+                continue;
+            }
+        }
         plants = step(&plants, &puzzle.growing)?;
+        generation = generation.checked_add(1).ok_or(SolveError::Overflow)?;
     }
     plants.iter().try_fold(0_i64, |sum, position| {
         sum.checked_add(*position).ok_or(SolveError::Overflow)
     })
 }
 
-/// Computes the sum after twenty generations; unfinished part two renders zero.
+/// Computes sums after twenty and fifty billion generations.
 ///
 /// # Errors
 /// Returns an error for invalid input or coordinate and sum overflow.
 pub fn solve(input: &str) -> Result<Answers, SolveError> {
     let puzzle = parse(input)?;
-    Ok(Answers::new(sum_after(&puzzle, 20)?, 0))
+    Ok(Answers::new(
+        sum_after(&puzzle, 20)?,
+        sum_after(&puzzle, 50_000_000_000)?,
+    ))
 }
 
 #[cfg(test)]
@@ -72,6 +110,11 @@ mod tests {
             sum_after(&puzzle, 20).unwrap(),
             -18,
             "negative positions remain meaningful"
+        );
+        assert_eq!(
+            sum_after(&puzzle, 50_000_000_000).unwrap(),
+            -49_999_999_998,
+            "exact translated cycle skip"
         );
     }
 
@@ -99,6 +142,23 @@ mod tests {
             sum_after(&puzzle, 2).unwrap(),
             0,
             "symmetry survives simultaneous updates"
+        );
+        assert_eq!(
+            sum_after(&puzzle, 50_000_000_000).unwrap(),
+            0,
+            "large symmetric evolution"
+        );
+    }
+
+    #[test]
+    fn skips_period_two_with_a_remainder() {
+        let puzzle = parse("initial state: ..#\n..#.. => #\n.#... => #\n..##. => #").unwrap();
+        assert_eq!(sum_after(&puzzle, 1).unwrap(), 5, "one plant becomes two");
+        assert_eq!(sum_after(&puzzle, 2).unwrap(), 2, "two plants become one");
+        assert_eq!(
+            sum_after(&puzzle, 50_000_000_001).unwrap(),
+            5,
+            "skip leaves an odd remainder"
         );
     }
 }
